@@ -269,9 +269,8 @@ tasks.named("dependencyUpdates")?.configure {
 
 tasks.named('test', Test) {
     retry {
-        if (System.getenv().containsKey("CI")) {
-            maxRetries = 3
-            failOnPassedAfterRetry = true
-        }
+        maxRetries = 3
+        maxFailures = 20
+        failOnPassedAfterRetry = true
     }
 }
