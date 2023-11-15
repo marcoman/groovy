@@ -96,8 +96,7 @@ enableFeaturePreview('GROOVY_COMPILATION_AVOIDANCE')
 
 
 gradleEnterprise {
-  server = "http://potato:9080"
-  allowUntrustedServer = true
+  server = "https://develocity-field.gradle.com"
 
   buildScan {
     capture { taskInputFiles = true }

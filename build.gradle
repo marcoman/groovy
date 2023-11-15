@@ -266,3 +266,12 @@ tasks.named("dependencyUpdates")?.configure {
         !(it.currentVersion.toLowerCase() ==~ UNSTABLE) && it.candidate.version.toLowerCase() ==~ UNSTABLE
     }
 }
+
+tasks.named('test', Test) {
+    retry {
+        if (System.getenv().containsKey("CI")) {
+            maxRetries = 3
+            failOnPassedAfterRetry = true
+        }
+    }
+}
