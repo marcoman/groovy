@@ -252,23 +252,6 @@ final class TraitASTTransformationTest {
     }
 
     @Test
-    void testClosureExpressionInTrait() {
-        assertScript shell, '''
-            trait GreetingObject {
-                String greeting = 'Welcome!'
-                Closure greeter() {
-                    return { -> greeting }
-                }
-            }
-            class Hello implements GreetingObject {}
-            def hello = new Hello()
-            def greeter = hello.greeter()
-            assert greeter.thisObject.is(hello)
-            assert greeter() == 'Welcome!'
-        '''
-    }
-
-    @Test
     void testUpdatePropertyFromSelf() {
         assertScript shell, '''
             trait Updater {
@@ -315,7 +298,6 @@ final class TraitASTTransformationTest {
                private String msg = 'foo'
                abstract String bar()
                public String foo() { bar()+msg }
-
             }
             @CompileStatic
             class A implements Foo {
@@ -634,6 +616,35 @@ final class TraitASTTransformationTest {
     @Test
     void testRuntimeWithTraitsDGM() {
         assertScript shell, '''
+            class C { }
+            trait T { }
+            def c = new C()
+            def t = c.withTraits(T)
+            def u = t.withTraits(T) // shouldn't fail
+        '''
+    }
+
+    // GROOVY-7984
+    @Test
+    void testRuntimeWithTraitsDGM2() {
+        assertScript shell, '''
+            class C {
+                def m() { 'C' }
+            }
+            @SelfType(C)
+            trait T {
+                def x() { m() }
+            }
+
+            def c = new C()
+            def t = c.withTraits(T) // 'T$TraitAdapter' implements trait 'T' but does not extend self type class 'C'
+            assert t.x() == 'C'
+        '''
+    }
+
+    @Test
+    void testRuntimeWithTraitsDGM3() {
+        assertScript shell, '''
             trait Flying {
                 String fly() {
                     "I'm flying!"
@@ -798,17 +809,6 @@ final class TraitASTTransformationTest {
     }
 
     @Test
-    void testProxyGenerationShouldNotFail() {
-        assertScript shell, '''
-            trait T { }
-            class C { }
-            def o = new C()
-            def t = o.withTraits(T)
-            def u = t.withTraits(T) // shouldn't fail
-        '''
-    }
-
-    @Test
     void testShouldNotThrowNPEWithInheritanceUsingExtends() {
         assertScript shell, '''
             trait Named {
@@ -860,36 +860,6 @@ final class TraitASTTransformationTest {
     }
 
     @Test
-    void testClosureInsideTrait() {
-        assertScript shell, '''
-            trait Doubler {
-                int foo(int x) {
-                    { -> 2*x }.call()
-                }
-            }
-            class Foo implements Doubler {}
-            def f = new Foo()
-            assert f.foo(4) == 8
-        '''
-    }
-
-    @Test
-    void testClosureInsideTraitAccessingProperty() {
-        assertScript shell, '''
-            trait Doubler {
-                int x
-                int foo() {
-                    { -> 2*x }.call()
-                }
-            }
-            class Foo implements Doubler {}
-            def f = new Foo()
-            f.x = 4
-            assert f.foo() == 8
-        '''
-    }
-
-    @Test
     void testThisDotClassInTrait() {
         assertScript shell, '''
             trait Classic {
@@ -931,7 +901,7 @@ final class TraitASTTransformationTest {
                 void update(String msg ) { message = msg}
             }
             @CompileStatic
-            class Foo implements TestTrait{
+            class Foo implements TestTrait {
             }
 
             @CompileStatic
@@ -1061,6 +1031,21 @@ final class TraitASTTransformationTest {
 
             def c = new C()
             assert c.foo() == 2
+        '''
+
+        // GROOVY-10144
+        assertScript shell, '''
+            trait T {
+                def m() { 'T' }
+            }
+            class C implements T {
+                @Override
+                def m() {
+                    'C' + T.super.m()
+                }
+            }
+            String result = new C().m()
+            assert result == 'CT'
         '''
 
         // GROOVY-8587
@@ -1720,6 +1705,26 @@ final class TraitASTTransformationTest {
                 assert c.foo() == 1
                 assert c.foo() == 2
             """
+
+            // GROOVY-7214
+            assertScript shell, """
+                $mode
+                trait T {
+                    private static int x = 0
+                    private static initX() {
+                        x = 42
+                    }
+                    static getValue() {
+                        initX()
+                        x
+                    }
+                }
+                $mode
+                class C implements T {
+                }
+
+                assert C.value == 42
+            """
         }
     }
 
@@ -2239,7 +2244,7 @@ final class TraitASTTransformationTest {
             trait Foo extends Serializable {}
             Foo x = null
         '''
-        assert err =~ 'Trait cannot extend an interface.'
+        assert err =~ 'A trait cannot extend an interface.'
     }
 
     @Test
@@ -2966,7 +2971,7 @@ final class TraitASTTransformationTest {
             @SelfType(T)
             trait B implements A {
                 void methodB() {
-                    methodA() // Cannot find matching method <UnionType:T+B>#methodA()
+                    methodA() // Cannot find matching method (T & B)#methodA()
                 }
             }
             class C extends T implements B {
@@ -3188,40 +3193,33 @@ final class TraitASTTransformationTest {
         assertScript shell, '''
             trait Configurable<ConfigObject> {
                 ConfigObject configObject
-
                 void configure(Closure<Void> configSpec) {
                     configSpec.resolveStrategy = Closure.DELEGATE_FIRST
                     configSpec.delegate = configObject
                     configSpec()
                 }
             }
-            public <T,U extends Configurable<T>> U configure(Class<U> clazz, @DelegatesTo(type="T") Closure configSpec) {
+            def <T,U extends Configurable<T>> U configure(Class<U> clazz, @DelegatesTo(type="T") Closure configSpec) {
                 Configurable<T> obj = (Configurable<T>) clazz.newInstance()
                 obj.configure(configSpec)
                 obj
             }
-
-
             class Module implements Configurable<ModuleConfig> {
                 String value
-
-                Module(){
+                Module() {
                     configObject = new ModuleConfig()
                 }
-
-
                 @Override
                 void configure(Closure<Void> configSpec) {
                     Configurable.super.configure(configSpec)
                     value = "${configObject.name}-${configObject.version}"
                 }
             }
-
-
             class ModuleConfig {
                 String name
                 String version
             }
+
             def module = configure(Module) {
                 name = 'test'
                 version = '1.0'
@@ -3286,19 +3284,48 @@ final class TraitASTTransformationTest {
         '''
     }
 
+    // GROOVY-11302
+    @Test
+    void testTraitWithMethodGenericsSTC() {
+        assertScript shell, '''
+            trait T {
+                def <X> X m(x) {x}
+                @TypeChecked
+                def test() {
+                    Number n = 1
+                    n = this.<Number>m(n)
+                }
+            }
+            class C implements T {
+            }
+            new C().test()
+        '''
+
+        def err = shouldFail shell, '''
+            trait U {
+                def <X> X m(x) {x}
+                @TypeChecked
+                def test() {
+                    Number n = 1
+                    n = this.<Object>m(n)
+                }
+            }
+        '''
+        assert err =~ /Cannot assign value of type java.lang.Object to variable of type java.lang.Number/
+    }
+
     // GROOVY-8281
     @Test
     void testFinalFieldsDependency() {
         assertScript shell, '''
-            trait MyTrait {
+            trait T {
                 private final String foo = 'foo'
                 private final String foobar = foo.toUpperCase() + 'bar'
-                int foobarSize() { foobar.size() }
+                int test() { foobar.size() }
             }
-
-            class Baz implements MyTrait {}
-
-            assert new Baz().foobarSize() == 6
+            class C implements T {
+            }
+            assert new C().test() == 6
         '''
     }
 

@@ -16,10 +16,26 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-package org.codehaus.groovy.classgen.asm.sc.vm6
+package org.codehaus.groovy.classgen.asm.sc.bugs
 
-import groovy.transform.stc.vm6.MethodCallsSTCTest
+import groovy.transform.stc.StaticTypeCheckingTestCase
 import org.codehaus.groovy.classgen.asm.sc.StaticCompilationTestSupport
 
-public class MethodCallsStaticCompilationTest extends MethodCallsSTCTest implements StaticCompilationTestSupport {
+final class Groovy11359 extends StaticTypeCheckingTestCase implements StaticCompilationTestSupport {
+
+    void testMakeCallSite() {
+        config.optimizationOptions.put(config.INVOKEDYNAMIC, Boolean.FALSE)
+
+        def err = shouldFail {
+            shell.evaluate '''import static org.codehaus.groovy.ast.tools.GeneralUtils.*
+
+                @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                    // generate `String m() { return new String("") }`
+                    node.addMethod("m", 1, STRING_TYPE, params(), null, returnS(ctorX(STRING_TYPE, constX(""))))
+                })
+                class C { }
+            '''
+        }
+        assert err =~ 'Call site lacked method target for static compilation'
+    }
 }

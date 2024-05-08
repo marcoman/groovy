@@ -687,6 +687,47 @@ final class AnnotationTest {
         '''
     }
 
+    // GROOVY-11206
+    @Test
+    void testAttributeValueConstants11() {
+        assertScript shell, '''
+            @Retention(RUNTIME)
+            @interface Foo {
+                String value()
+            }
+            @groovy.transform.CompileStatic
+            @Foo(BarController.SOME_URL)
+            class BarController {
+                public static final String BASE_URL = '/bars'
+                public static final String SOME_URL = BASE_URL + '/{barId}/bazs'
+            }
+
+            def foo = BarController.getAnnotation(Foo)
+            assert foo.value() == '/bars/{barId}/bazs'
+        '''
+    }
+
+    // GROOVY-11207
+    @Test
+    void testAttributeValueConstants12() {
+        assertScript shell, '''
+            @Retention(RUNTIME)
+            @interface Foo {
+                String value()
+            }
+            @groovy.transform.CompileStatic
+            class Bar {
+                public static final String BASE = 'base'
+                @Foo('all your ' + BASE)
+                def baz() {
+                }
+            }
+
+            def foo = Bar.getMethod('baz').getAnnotation(Foo)
+            assert foo.value() == 'all your base'
+        '''
+    }
+
     @Test
     void testRuntimeRetentionAtAllLevels() {
         assertScript shell, '''

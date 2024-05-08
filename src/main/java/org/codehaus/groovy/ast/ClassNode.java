@@ -30,6 +30,7 @@ import org.codehaus.groovy.ast.stmt.ExpressionStatement;
 import org.codehaus.groovy.ast.stmt.Statement;
 import org.codehaus.groovy.ast.tools.ParameterUtils;
 import org.codehaus.groovy.control.CompilePhase;
+import org.codehaus.groovy.runtime.ArrayGroovyMethods;
 import org.codehaus.groovy.transform.ASTTransformation;
 import org.codehaus.groovy.transform.GroovyASTTransformation;
 import org.codehaus.groovy.vmplugin.VMPluginFactory;
@@ -46,11 +47,13 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 import static org.apache.groovy.ast.tools.MethodNodeUtils.getCodeAsBlock;
 import static org.codehaus.groovy.transform.RecordTypeASTTransformation.recordNative;
+import static org.codehaus.groovy.transform.trait.Traits.isTrait;
 import static org.objectweb.asm.Opcodes.ACC_ABSTRACT;
 import static org.objectweb.asm.Opcodes.ACC_ANNOTATION;
 import static org.objectweb.asm.Opcodes.ACC_ENUM;
@@ -153,7 +156,7 @@ public class ClassNode extends AnnotatedNode {
     private Map<String, FieldNode> fieldIndex;
     private ClassNode superClass;
     protected boolean isPrimaryNode;
-    // TODO: initialize for primary nodes only!!
+    // TODO: initialize for primary nodes only!
     private List<ClassNode> permittedSubclasses = new ArrayList<>();
     private List<RecordComponentNode> recordComponents = Collections.emptyList();
 
@@ -397,9 +400,13 @@ public class ClassNode extends AnnotatedNode {
         if (!lazyInitDone && !isResolved()) {
             throw new GroovyBugError("ClassNode#getSuperClass for " + getName() + " called before class resolving");
         }
-        ClassNode sn = redirect().getUnresolvedSuperClass();
-        if (sn != null) sn = sn.redirect();
-        return sn;
+        var sc = redirect().getUnresolvedSuperClass();
+        if (sc != null) {
+            sc = sc.redirect();
+            if (isPrimaryClassNode() && (sc.isInterface() || isTrait(sc)))
+                sc = ClassHelper.OBJECT_TYPE; // GROOVY-8272, GROOVY-11299
+        }
+        return sc;
     }
 
     public void setSuperClass(final ClassNode superClass) {
@@ -865,9 +872,9 @@ public class ClassNode extends AnnotatedNode {
     }
 
     /**
-     * This method returns a list of all methods of the given name
-     * defined in the current class
-     * @return the method list
+     * Returns a list of all methods with the given name from this class.
+     *
+     * @return method list (possibly empty)
      * @see #getMethods(String)
      */
     public List<MethodNode> getDeclaredMethods(String name) {
@@ -878,25 +885,26 @@ public class ClassNode extends AnnotatedNode {
     }
 
     /**
-     * This method creates a list of all methods with this name of the
-     * current class and of all super classes
-     * @return the methods list
+     * Returns a list of all methods with the given name from this class and its
+     * super class(es).
+     *
+     * @return method list (possibly empty)
      * @see #getDeclaredMethods(String)
      */
     public List<MethodNode> getMethods(String name) {
-        List<MethodNode> result = new ArrayList<>();
+        List<MethodNode> list = new ArrayList<>(4);
         ClassNode node = this;
         while (node != null) {
-            result.addAll(node.getDeclaredMethods(name));
+            list.addAll(node.getDeclaredMethods(name));
             node = node.getSuperClass();
         }
-        return result;
+        return list;
     }
 
     /**
      * Finds a method matching the given name and parameters in this class.
      *
-     * @return the method matching the given name and parameters or null
+     * @return method node or null
      */
     public MethodNode getDeclaredMethod(String name, Parameter[] parameters) {
         for (MethodNode method : getDeclaredMethods(name)) {
@@ -909,9 +917,9 @@ public class ClassNode extends AnnotatedNode {
 
     /**
      * Finds a method matching the given name and parameters in this class
-     * or any parent class.
+     * or any super class.
      *
-     * @return the method matching the given name and parameters or null
+     * @return method node or null
      */
     public MethodNode getMethod(String name, Parameter[] parameters) {
         for (MethodNode method : getMethods(name)) {
@@ -931,6 +939,11 @@ public class ClassNode extends AnnotatedNode {
             return ClassHelper.isPrimitiveVoid(type);
         }
         if (ClassHelper.isObjectType(type)) {
+            return true;
+        }
+        if (this.isArray() && type.isArray()
+                && ClassHelper.isObjectType(type.getComponentType())
+                && !ClassHelper.isPrimitiveType(this.getComponentType())) {
             return true;
         }
         for (ClassNode node = this; node != null; node = node.getSuperClass()) {
@@ -1031,29 +1044,35 @@ public class ClassNode extends AnnotatedNode {
 
     public MethodNode getGetterMethod(String getterName, boolean searchSuperClasses) {
         MethodNode getterMethod = null;
+
+        java.util.function.Predicate<MethodNode> isNullOrSynthetic = (method) ->
+                (method == null || (method.getModifiers() & ACC_SYNTHETIC) != 0);
+
         boolean booleanReturnOnly = getterName.startsWith("is");
         for (MethodNode method : getDeclaredMethods(getterName)) {
             if (method.getName().equals(getterName) && method.getParameters().length == 0
                     && (booleanReturnOnly ? ClassHelper.isPrimitiveBoolean(method.getReturnType()) : !method.isVoidMethod())) {
-                // GROOVY-7363: There can be multiple matches for a getter returning a generic parameter type, due to
+                // GROOVY-7363, GROOVY-11341: There can be multiple matches if a method returns a non-final type due to
                 // the generation of a bridge method. The real getter is really the non-bridge, non-synthetic one as it
                 // has the most specific and exact return type of the two. Picking the bridge method results in loss of
                 // type information, as it down-casts the return type to the lower bound of the generic parameter.
-                if (getterMethod == null || getterMethod.isSynthetic()) {
+                if (isNullOrSynthetic.test(getterMethod)) {
                     getterMethod = method;
                 }
             }
         }
-        if (getterMethod != null) {
-            return getterMethod;
-        }
-        if (searchSuperClasses) {
+
+        if (searchSuperClasses && isNullOrSynthetic.test(getterMethod)) {
             ClassNode parent = getSuperClass();
             if (parent != null) {
-                return parent.getGetterMethod(getterName);
+                MethodNode method = parent.getGetterMethod(getterName);
+                if (getterMethod == null || !isNullOrSynthetic.test(method)) {
+                    getterMethod = method;
+                }
             }
         }
-        return null;
+
+        return getterMethod;
     }
 
     public MethodNode getSetterMethod(String setterName) {
@@ -1110,13 +1129,8 @@ public class ClassNode extends AnnotatedNode {
     }
 
     public MethodNode tryFindPossibleMethod(final String name, final Expression arguments) {
-        if (!(arguments instanceof TupleExpression)) {
-            return null;
-        }
-
-        // TODO: this won't strictly be true when using list expansion in argument calls
-        TupleExpression args = (TupleExpression) arguments;
-        int nArgs = args.getExpressions().size();
+        List<Expression> args = arguments instanceof TupleExpression ? ((TupleExpression) arguments).getExpressions() : Collections.singletonList(arguments);
+        int nArgs = args.size(); // TODO: this isn't strictly accurate when using spread argument expansion
         MethodNode method = null;
 
         for (ClassNode cn = this; cn != null; cn = cn.getSuperClass()) {
@@ -1124,7 +1138,7 @@ public class ClassNode extends AnnotatedNode {
                 if (hasCompatibleNumberOfArgs(mn, nArgs)) {
                     boolean match = true;
                     for (int i = 0; i < nArgs; i += 1) {
-                        if (!hasCompatibleType(args, mn, i)) {
+                        if (!hasCompatibleType(args.get(i), mn, i)) {
                             match = false;
                             break;
                         }
@@ -1148,6 +1162,18 @@ public class ClassNode extends AnnotatedNode {
             }
         }
 
+faces:  if (method == null && ArrayGroovyMethods.asBoolean(getInterfaces())) { // GROOVY-11323
+            for (ClassNode cn : getAllInterfaces()) {
+                for (MethodNode mn : cn.getDeclaredMethods(name)) {
+                    if (mn.isPublic() && !mn.isStatic() && hasCompatibleNumberOfArgs(mn, nArgs) && (nArgs == 0
+                            || IntStream.range(0,nArgs).allMatch(i -> hasCompatibleType(args.get(i),mn,i)))) {
+                        method = mn;
+                        break faces;
+                    }
+                }
+            }
+        }
+
         return method;
     }
 
@@ -1157,10 +1183,10 @@ public class ClassNode extends AnnotatedNode {
                 || (i >= lastParamIndex && isPotentialVarArg(maybe, lastParamIndex) && match.getParameters()[i].getType().equals(maybe.getParameters()[lastParamIndex].getType().getComponentType()));
     }
 
-    private static boolean hasCompatibleType(final TupleExpression args, final MethodNode method, final int i) {
+    private static boolean hasCompatibleType(final Expression arg, final MethodNode method, final int i) {
         int lastParamIndex = method.getParameters().length - 1;
-        return (i <= lastParamIndex && args.getExpression(i).getType().isDerivedFrom(method.getParameters()[i].getType()))
-                || (i >= lastParamIndex && isPotentialVarArg(method, lastParamIndex) && args.getExpression(i).getType().isDerivedFrom(method.getParameters()[lastParamIndex].getType().getComponentType()));
+        return (i <= lastParamIndex && arg.getType().isDerivedFrom(method.getParameters()[i].getType()))
+                || (i >= lastParamIndex && isPotentialVarArg(method, lastParamIndex) && arg.getType().isDerivedFrom(method.getParameters()[lastParamIndex].getType().getComponentType()));
     }
 
     private static boolean hasCompatibleNumberOfArgs(final MethodNode method, final int nArgs) {

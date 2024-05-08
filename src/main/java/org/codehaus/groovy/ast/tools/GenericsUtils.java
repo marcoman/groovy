@@ -321,8 +321,7 @@ public class GenericsUtils {
         }
         if (temp instanceof DecompiledClassNode // GROOVY-10461: check without resolving supers
                         ? ((DecompiledClassNode) temp).isParameterized() : temp.isUsingGenerics()) {
-            ClassNode result = ClassHelper.makeWithoutCaching(temp.getName());
-            result.setRedirect(temp);
+            ClassNode result = temp.getPlainNodeReference();
             result.setGenericsTypes(null);
             result.setUsingGenerics(false);
             while (dims > 0) { dims -= 1;
@@ -475,7 +474,7 @@ public class GenericsUtils {
                     newgTypes[i] = fixed;
                 } else if (oldgType.isPlaceholder()) {
                     // correct "T"
-                    newgTypes[i] = new GenericsType(genericsSpec.getOrDefault(oldgType.getName(), ClassHelper.OBJECT_TYPE));
+                    newgTypes[i] = genericsSpec.containsKey(oldgType.getName())? new GenericsType(genericsSpec.get(oldgType.getName())): erasure(oldgType);
                 } else {
                     // correct "List<T>", etc.
                     newgTypes[i] = new GenericsType(correctToGenericsSpecRecurse(genericsSpec, correctToGenericsSpec(genericsSpec, oldgType), exclusions));

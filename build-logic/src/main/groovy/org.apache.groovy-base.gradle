@@ -21,6 +21,7 @@ import groovy.transform.CompileStatic
 import org.apache.groovy.gradle.GroovyLibraryExtension
 import org.apache.groovy.gradle.JarJarTask
 import org.apache.groovy.gradle.ReleaseInfoGenerator
+import com.github.spotbugs.snom.Effort
 import org.gradle.api.attributes.java.TargetJvmVersion
 
 import com.github.spotbugs.snom.SpotBugsTask
@@ -78,6 +79,7 @@ configurations {
     }
     sourcesForAggregation {
         canBeConsumed = true
+        canBeConsumed = true
         canBeResolved = false
         extendsFrom implementation, runtimeOnly
         attributes {
@@ -123,13 +125,15 @@ configurations {
 }
 
 dependencies {
-    compileOnly providers.provider { "com.github.spotbugs:spotbugs-annotations:${versions.spotbugsAnnotations}" }
+    compileOnly providers.provider { "com.github.spotbugs:spotbugs-annotations:${versions.spotbugs}" }
 
     codenarc "org.codenarc:CodeNarc:${versions.codenarc}"
     codenarc project(":groovy-templates")
 
     checkstyle "com.puppycrawl.tools:checkstyle:${versions.checkstyle}"
     spotbugs "com.github.spotbugs:spotbugs:${versions.spotbugs}"
+    spotbugs "org.apache.logging.log4j:log4j-api:${versions.log4j2}"
+    spotbugs "org.apache.logging.log4j:log4j-core:${versions.log4j2}"
     spotbugsSlf4j "org.slf4j:slf4j-simple:${versions.slf4j}"
 }
 
@@ -142,6 +146,7 @@ def excludedFromManifest = [
 
 tasks.named('jar') {
     archiveAppendix = 'raw'
+    archiveClassifier.set("raw")
     groovyLibrary.configureManifest(manifest, excludedFromManifest)
 }
 
@@ -200,7 +205,7 @@ tasks.register("jarjar", JarJarTask) {
                          'org/objectweb/asm/util/ASMifier.class',
                          'org/objectweb/asm/util/Trace*']
     ]
-    outputFile = tasks.named('jar').flatMap { layout.buildDirectory.file("libs/${it.archiveBaseName.get()}-${it.archiveVersion.get()}${it.archiveClassifier.get() ? '-' + it.archiveClassifier.get() : ''}.jar") }
+    outputFile = tasks.named('jar').flatMap { layout.buildDirectory.file("libs/${it.archiveBaseName.get()}-${it.archiveVersion.get()}${(it.archiveClassifier.get() && it.archiveClassifier.get() != 'raw') ? '-' + it.archiveClassifier.get() : ''}.jar") }
 
     withManifest {
         def extras = project.name == 'groovy' ? ['Main-Class': 'groovy.ui.GroovyMain'] : [:]
@@ -232,12 +237,14 @@ tasks.withType(CodeNarc).configureEach {
 tasks.withType(SpotBugsTask).configureEach {
     excludeFilter = rootProject.file("config/spotbugs/exclude.xml")
     ignoreFailures = true
-    effort = 'max'
+    effort = Effort.valueOf('MAX')
     maxHeapSize = '2g'
     reports {
-        xml.enabled = false
+        xml {
+            required = false
+        }
         html {
-            enabled = true
+            required = true
             stylesheet = 'fancy.xsl'
         }
     }
@@ -272,6 +279,13 @@ tasks.withType(Checkstyle).configureEach {
     }
 }
 
+// remove below if checkstyle fix up their dependency metadata to no longer have conflicts
+configurations.checkstyle {
+    resolutionStrategy.capabilitiesResolution.withCapability("com.google.collections:google-collections") {
+        select("com.google.guava:guava:0")
+    }
+}
+
 // Groovy doesn't publish the regular jars: it publishes
 // the repackaged jars, which is why we can't use the
 // default publication, and need to create our own
@@ -294,8 +308,8 @@ components.groovyLibrary {
 // By declaring a codehaus capability we can tell Gradle that the user has to
 // choose between "old" groovy and "new" groovy
 List<String> capabilities = [
-        "org.codehaus.groovy:${archivesBaseName}:${sharedConfiguration.groovyVersion.get()}",
-        "org.apache.groovy:${archivesBaseName}:${sharedConfiguration.groovyVersion.get()}"
+        "org.codehaus.groovy:${base.archivesName.get()}:${sharedConfiguration.groovyVersion.get()}",
+        "org.apache.groovy:${base.archivesName.get()}:${sharedConfiguration.groovyVersion.get()}"
 ]
 int targetJvmVersion = Integer.valueOf(sharedConfiguration.targetJavaVersion.get())
 // First we create the "API" and "runtime" variants of Groovy for publication

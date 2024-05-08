@@ -18,12 +18,22 @@
  */
 package groovy.bugs
 
-import groovy.test.GroovyTestCase
+import org.codehaus.groovy.classgen.asm.AbstractBytecodeTestCase
 
-class TernaryOperatorBugTest extends GroovyTestCase {
-    void testTernaryOperator() {
-        assertScript '''
-            Class dsClass = true ? LinkedHashSet : HashSet
+final class Groovy11362 extends AbstractBytecodeTestCase {
+
+    void testCatchException() {
+        def bytecode = compile method:'test', '''
+            void test() {
+                try {
+                    print 'f'
+                } catch (e) {
+                }
+            }
         '''
+        assert bytecode.hasSequence([
+            'LOCALVARIABLE this Lscript; L0 L6 0',
+            'LOCALVARIABLE e Ljava/lang/Exception; L5 L3 1' // not Ljava/lang/Object;
+        ])
     }
 }

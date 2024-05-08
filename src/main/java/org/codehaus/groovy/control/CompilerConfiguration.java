@@ -23,7 +23,6 @@ import org.codehaus.groovy.GroovyBugError;
 import org.codehaus.groovy.control.customizers.CompilationCustomizer;
 import org.codehaus.groovy.control.io.NullWriter;
 import org.codehaus.groovy.control.messages.WarningMessage;
-import org.codehaus.groovy.vmplugin.VMPlugin;
 import org.objectweb.asm.Opcodes;
 
 import java.io.File;
@@ -104,6 +103,8 @@ public class CompilerConfiguration {
     public static final String JDK21 = "21";
     /** This (<code>"22"</code>) is the value for targetBytecode to compile for a JDK 22. */
     public static final String JDK22 = "22";
+    /** This (<code>"23"</code>) is the value for targetBytecode to compile for a JDK 23. */
+    public static final String JDK23 = "23";
 
     /**
      * JDK version to bytecode version mapping.
@@ -120,7 +121,8 @@ public class CompilerConfiguration {
             JDK19, Opcodes.V19,
             JDK20, Opcodes.V20,
             JDK21, Opcodes.V21,
-            JDK22, Opcodes.V22
+            JDK22, Opcodes.V22,
+            JDK23, Opcodes.V23
     );
 
     public static final String DEFAULT_TARGET_BYTECODE = defaultTargetBytecode();
@@ -228,6 +230,7 @@ public class CompilerConfiguration {
         }
 
         @Override
+        @Deprecated
         public void setOutput(final PrintWriter output) {
             throw new UnsupportedOperationException();
         }
@@ -1115,7 +1118,7 @@ public class CompilerConfiguration {
      * @since 4.0.0
      */
     private static String defaultTargetBytecode() {
-        final String javaVersion = VMPlugin.getJavaVersion();
+        String javaVersion = Integer.toString(Runtime.version().feature());
         if (JDK_TO_BYTECODE_VERSION_MAP.containsKey(javaVersion)) {
             return javaVersion;
         }

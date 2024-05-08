@@ -19,6 +19,7 @@
 package groovy.transform.stc
 
 import org.codehaus.groovy.control.MultipleCompilationErrorsException
+import org.codehaus.groovy.tools.javac.JavaAwareCompilationUnit
 
 import static org.codehaus.groovy.control.customizers.builder.CompilerCustomizationBuilder.withConfig
 
@@ -106,7 +107,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
     void testStaticMethodCallWithInheritance() {
         assertScript '''
             String echo = B.echo 'echo'
-            assert  echo == 'echo'
+            assert echo == 'echo'
         '''
     }
 
@@ -130,7 +131,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
         assertScript '''
             String[] arr = ['3','2','1']
             Arrays.sort(arr)
-            assert arr == ['1','2','3']  as String[]
+            assert arr == ['1','2','3'] as String[]
         '''
     }
 
@@ -153,7 +154,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
     void testPlusStaticMethodCall() {
         assertScript '''
             static int foo() { 1 }
-            assert 1+foo() == 2
+            assert 1 + foo() == 2
         '''
     }
 
@@ -307,12 +308,12 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
                     return t
                 }
             }
-            class C implements I<String> {
+            class C10494 implements I<String> {
                 @Override m(String s) {
                     I.super.m(s)
                 }
             }
-            String result = new C().m('works')
+            String result = new C10494().m('works')
             assert result == 'works'
         '''
 
@@ -321,7 +322,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
                 default void m(T t) {
                 }
             }
-            class C implements I<String> {
+            class C10494 implements I<String> {
                 @Override void m(String s) {
                     super.m(s)
                 }
@@ -827,42 +828,78 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
+    // GROOVY-5226, GROOVY-11290
     void testShouldFailBecauseVariableIsReassigned() {
-        shouldFailWithMessages '''
-            static String foo(String s) {
-                'String'
-            }
+        String foo = 'def foo(CharSequence cs) { }'
+
+        shouldFailWithMessages foo + '''
             def it
             if (it instanceof String) {
                 it = new Date()
                 foo(it)
             }
         ''',
-        'foo(java.util.Date)'
+        'Cannot find matching method','#foo(java.util.Date)'
+
+        shouldFailWithMessages foo + '''
+            def bar(CharSequence cs) { }
+            def it
+            if (it instanceof CharSequence) {
+                if (it instanceof String) {
+                    it = new Date()
+                    foo(it)
+                }
+                bar(it) // it is CharSequence or Date
+            }
+        ''',
+        'Cannot find matching method','#foo(java.util.Date)',
+        'Cannot find matching method','#bar(java.util.Date)'
     }
 
+    // GROOVY-5226, GROOVY-11290
     void testShouldNotFailEvenIfVariableIsReassigned() {
-        assertScript '''
-            static String foo(int val) {
-                'int'
-            }
-            def it
+        String foobar = 'def foo(int i) { }\ndef bar(CharSequence cs) { }'
+
+        assertScript foobar + '''
+            def it = ""
             if (it instanceof String) {
+                bar(it)
                 it = 123
                 foo(it)
             }
         '''
+
+        assertScript foobar + '''
+            def it = ""
+            if (it instanceof CharSequence) {
+                bar(it)
+                if (it instanceof String) {
+                    bar(it)
+                    it = 123
+                    foo(it)
+                } else {
+                    bar(it)
+                }
+            }
+        '''
+
+        assertScript foobar + '''
+            def it = ~/regexp/
+            if (it !instanceof String) {
+                it = 123
+                foo(it)
+            } else {
+                bar(it)
+            }
+        '''
     }
 
-    void testShouldNotFailEvenIfVariableIsReassignedAndInstanceOfIsEmbed() {
+    // GROOVY-5226, GROOVY-11290
+    void testShouldNotFailEvenIfVariableIsReassignedAndMultipleInstanceOf() {
         assertScript '''
-            static String foo(int val) {
-                'int'
-            }
-            static String foo(Date val) {
-                'Date'
-            }
-            def it
+            def foo(int i) { 'int' }
+            def foo(Date d) { 'Date' }
+            def it = ""
             if (it instanceof String) {
                 it = 123
                 foo(it)
@@ -1014,39 +1051,39 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
 
     void testShouldNotAllowMethodCallFromStaticInitializer() {
         shouldFailWithMessages '''
-            class A {
+            class Foo {
                 void instanceMethod() {}
                 static {
                     instanceMethod()
                 }
             }
-            new A()
+            new Foo()
         ''',
-        'Non-static method A#instanceMethod cannot be called from static context'
+        'Non-static method Foo#instanceMethod cannot be called from static context'
     }
 
     void testShouldNotAllowMethodCallFromStaticMethod() {
         shouldFailWithMessages '''
-            class A {
+            class Foo {
                 void instanceMethod() {}
                 static void staticMethod() {
                     instanceMethod()
                 }
             }
-            A.staticMethod()
+            Foo.staticMethod()
         ''',
-        'Non-static method A#instanceMethod cannot be called from static context'
+        'Non-static method Foo#instanceMethod cannot be called from static context'
     }
 
     void testShouldNotAllowMethodCallFromStaticField() {
         shouldFailWithMessages '''
-            class A {
+            class Foo {
                 boolean instanceMethod() {}
                 static FOO = instanceMethod()
             }
-            new A()
+            new Foo()
         ''',
-        'Non-static method A#instanceMethod cannot be called from static context'
+        'Non-static method Foo#instanceMethod cannot be called from static context'
     }
 
     // GROOVY-5495
@@ -1054,17 +1091,17 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
         assertScript '''
             class ClassUnderTest {
                 void methodFromString(SecondInterface si) {
-                    si.methodFromSecondInterface();
-                    si.methodFromFirstInterface();
+                    si.methodFromSecondInterface()
+                    si.methodFromFirstInterface()
                 }
             }
 
             interface FirstInterface {
-                void methodFromFirstInterface();
+                void methodFromFirstInterface()
             }
 
             interface SecondInterface extends FirstInterface {
-                void methodFromSecondInterface();
+                void methodFromSecondInterface()
             }
 
             new ClassUnderTest()
@@ -1112,7 +1149,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
     // GROOVY-5540
     void testChoosePublicMethodInHierarchy() {
         assertScript '''import groovy.transform.stc.MethodCallsSTCTest.Child2
-            class A {
+            class Foo {
                 int delegate() {
                     @ASTTest(phase=INSTRUCTION_SELECTION, value={
                         def md = node.rightExpression.getNodeMetaData(DIRECT_METHOD_CALL_TARGET)
@@ -1122,7 +1159,7 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
                     res
                 }
             }
-            assert new A().delegate() == 2
+            assert new Foo().delegate() == 2
         '''
     }
 
@@ -1301,32 +1338,32 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
     void testSpreadArgsRestrictedInConstructorCall() {
         // GROOVY-10597
         assertScript '''
-            class C {
-                C(String one, String... zeroOrMore) {
+            class Foo {
+                Foo(String one, String... zeroOrMore) {
                     String result = one + zeroOrMore.join('')
                     assert result == 'ABC'
                 }
             }
-            new C('A', *['B'], 'C')
+            new Foo('A', *['B'], 'C')
         '''
 
         shouldFailWithMessages '''
-            class C {
-                C(String one, String... zeroOrMore) {
+            class Foo {
+                Foo(String one, String... zeroOrMore) {
                 }
             }
-            new C(*['A','B'])
+            new Foo(*['A','B'])
         ''',
         'The spread operator cannot be used as argument of method or closure calls with static type checking because the number of arguments cannot be determined at compile time'
 
         shouldFailWithMessages '''
-            class C {
-                C(String a, String b) {
+            class Foo {
+                Foo(String a, String b) {
                 }
             }
-            new C(*['A','B'])
+            new Foo(*['A','B'])
         ''',
-        'Cannot find matching constructor C(',
+        'Cannot find matching constructor Foo(',
         'The spread operator cannot be used as argument of method or closure calls with static type checking because the number of arguments cannot be determined at compile time'
     }
 
@@ -1354,6 +1391,42 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
         ''',
         'The spread operator cannot be used as argument of method or closure calls with static type checking because the number of arguments cannot be determined at compile time',
         'Cannot call closure that accepts [java.lang.String, java.lang.String, java.lang.String] with '
+    }
+
+    // GROOVY-8488
+    void testBigDecimalLiteralArgument() {
+        assertScript '''
+            def m1(double d) { Double.valueOf(d) }
+            def m2(float f) { Float.valueOf(f) }
+            assert m1(1.0) == 1.0d
+            assert m2(1.0) == 1.0f
+        '''
+
+        shouldFailWithMessages '''
+            class Foo {
+                def m1(long l) { Long.valueOf(l) }
+                def m2(int i) { new Integer(i) }
+                void test() {
+                    m1(1.0)
+                    m2(1.0)
+                }
+            }
+        ''',
+        'Cannot find matching method Foo#m1(java.math.BigDecimal)',
+        'Cannot find matching method Foo#m2(java.math.BigDecimal)'
+
+        shouldFailWithMessages '''
+            class Foo {
+                def m1(long l) { Long.valueOf(l) }
+                def m2(int i) { new Integer(i) }
+                void test() {
+                    m1(1g)
+                    m2(1g)
+                }
+            }
+        ''',
+        'Cannot find matching method Foo#m1(java.math.BigInteger)',
+        'Cannot find matching method Foo#m2(java.math.BigInteger)'
     }
 
     void testBoxingShouldCostMore() {
@@ -1527,6 +1600,18 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
 
             assert none.length == 0
             assert oneAlso.length == 1
+        '''
+    }
+
+    // GROOVY-5525
+    void testShouldFindArraysCopyOf() {
+        assertScript '''
+            class CopyOf {
+                public static void main(String[] args) {
+                    def copy = Arrays.copyOf(args, 1)
+                    assert copy.length == 1
+                }
+            }
         '''
     }
 
@@ -1722,35 +1807,35 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
 
     void testShouldFindSetProperty() {
         assertScript '''
-            class C {
+            class Foo {
                 int p
                 void m() {
                     this.setProperty('p', 1)
                 }
             }
-            def c = new C()
-            c.m()
-            assert c.p == 1
+            def o = new Foo()
+            o.m()
+            assert o.p == 1
         '''
     }
 
     // GROOVY-5888
     void testStaticContext1() {
         assertScript '''
-            class C {
+            class Foo {
                 static List p = 'a,b,c'.split(/,/)*.trim()
             }
-            assert C.p == ['a','b','c']
+            assert Foo.p == ['a','b','c']
         '''
     }
 
     // GROOVY-11195
     void testStaticContext2() {
         assertScript '''
-            class C {
+            class Foo {
                 static String p = this.getName() // instance method of Class
             }
-            assert C.p == 'C'
+            assert Foo.p == 'Foo'
         '''
     }
 
@@ -1812,22 +1897,69 @@ class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-6751
-    void testMethodInBothInterfaceAndSuperclass() {
+    void testMethodInBothInterfaceAndSuperclass1() {
         assertScript '''
-            interface Ifc {
+            interface Face {
               Object getProperty(String s)
             }
-
-            class DuplicateMethodInIfc implements Ifc {}  // implemented in groovy.lang.GroovyObject
-
-            class Tester {
-              DuplicateMethodInIfc dup = new DuplicateMethodInIfc()
-              Object obj = dup.getProperty("foo")
+            class Impl implements Face { // implemented in groovy.lang.GroovyObject
             }
 
-            try { new Tester()}
-            catch(groovy.lang.MissingPropertyException expected) {}
+            try {
+                Impl impl = new Impl()
+                impl.getProperty('xx')
+            }
+            catch(MissingPropertyException expected) {
+            }
         '''
+    }
+
+    // GROOVY-11341
+    void testMethodInBothInterfaceAndSuperclass2() {
+        File parentDir = File.createTempDir()
+        config.with {
+            targetDirectory = File.createTempDir()
+            jointCompilationOptions = [memStub: true]
+        }
+        try {
+            new File(parentDir, 'p').mkdir()
+
+            def a = new File(parentDir, 'p/A.java')
+            a.write '''package p;
+                public interface A {
+                    Object getValue();
+                }
+            '''
+            def b = new File(parentDir, 'p/B.java')
+            b.write '''package p;
+                public class B {
+                    public Long getValue() { return 21L; }
+                }
+            '''
+            def c = new File(parentDir, 'p/C.java')
+            c.write '''package p;
+                public class C extends B implements A {
+                    // public bridge Object getValue() { ... }
+                }
+            '''
+            def d = new File(parentDir, 'D.groovy')
+            d.write '''
+                def pojo = new p.C()
+                Long value = pojo.getValue() // Cannot assign value of type Object to variable of type Long
+                value += pojo.value
+                assert value == 42L
+            '''
+
+            def loader = new GroovyClassLoader(this.class.classLoader)
+            def cu = new JavaAwareCompilationUnit(config, loader)
+            cu.addSources(a, b, c, d)
+            cu.compile()
+
+            loader.loadClass('D').main()
+        } finally {
+            parentDir.deleteDir()
+            config.targetDirectory.deleteDir()
+        }
     }
 
     // GROOVY-7987

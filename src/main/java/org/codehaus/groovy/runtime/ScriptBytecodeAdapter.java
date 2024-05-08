@@ -23,7 +23,6 @@ import groovy.lang.EmptyRange;
 import groovy.lang.GroovyInterceptable;
 import groovy.lang.GroovyObject;
 import groovy.lang.GroovyRuntimeException;
-import groovy.lang.GroovySystem;
 import groovy.lang.IntRange;
 import groovy.lang.MetaClass;
 import groovy.lang.MissingMethodException;
@@ -47,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.BaseStream;
 
 /**
  * A static helper class to interface bytecode and runtime
@@ -243,8 +243,8 @@ public class ScriptBytecodeAdapter {
     //  --------------------------------------------------------
 
     public static int selectConstructorAndTransformArguments(Object[] arguments, int numberOfConstructors, Class which) throws Throwable {
-        MetaClass metaClass = GroovySystem.getMetaClassRegistry().getMetaClass(which);
         try {
+            MetaClass metaClass = InvokerHelper.getMetaClass(which);
             return metaClass.selectConstructorAndTransformArguments(numberOfConstructors, arguments);
         } catch (GroovyRuntimeException gre) {
             throw unwrap(gre);
@@ -467,7 +467,13 @@ public class ScriptBytecodeAdapter {
 
     public static Object getProperty(Class senderClass, Object receiver, String messageName) throws Throwable {
         try {
-            return InvokerHelper.getProperty(receiver, messageName);
+            if (receiver instanceof GroovyObject) {
+                var groovyObject = (GroovyObject) receiver;
+                return groovyObject.getProperty(messageName);
+            } else {
+                MetaClass metaClass = InvokerHelper.getMetaClass(receiver);
+                return metaClass.getProperty(senderClass, receiver, messageName, false, false);
+            }
         } catch (GroovyRuntimeException gre) {
             throw unwrap(gre);
         }
@@ -493,7 +499,13 @@ public class ScriptBytecodeAdapter {
 
     public static void setProperty(Object messageArgument, Class senderClass, Object receiver, String messageName) throws Throwable {
         try {
-            InvokerHelper.setProperty(receiver, messageName, messageArgument);
+            if (receiver instanceof GroovyObject) {
+                var groovyObject = (GroovyObject) receiver;
+                groovyObject.setProperty(messageName, messageArgument);
+            } else {
+                MetaClass metaClass = InvokerHelper.getMetaClass(receiver);
+                metaClass.setProperty(senderClass, receiver, messageName, messageArgument, false, false);
+            }
         } catch (GroovyRuntimeException gre) {
             if (gre instanceof MissingPropertyException
                     && receiver instanceof GroovyObject
@@ -920,17 +932,22 @@ public class ScriptBytecodeAdapter {
     //spread
     public static Object[] despreadList(final Object[] args, final Object[] spreads, final int[] positions) {
         List<Object> ret = new ArrayList<>();
-        int argsPos = 0;
-        int spreadPos = 0;
+        int argsPos = 0, spreadsPos = 0;
         for (int position : positions) {
-            for (; argsPos < position; argsPos++) {
+            for (; argsPos < position; ++argsPos) {
                 ret.add(args[argsPos]);
             }
-            Object value = spreads[spreadPos];
+            Object value = spreads[spreadsPos];
             if (value == null) {
                 ret.add(null);
             } else if (value instanceof List) {
                 ret.addAll((List<?>) value);
+            } else if (value instanceof Iterable) {
+                ((Iterable<?>) value).forEach(ret::add);
+            } else if (value instanceof Iterator) {
+                ((Iterator<?>) value).forEachRemaining(ret::add);
+            } else if (value instanceof BaseStream) {
+                ((BaseStream<?,?>) value).iterator().forEachRemaining(ret::add);
             } else if (value.getClass().isArray()) {
                 ret.addAll(DefaultTypeTransformation.primitiveArrayToList(value));
             } else {
@@ -940,9 +957,9 @@ public class ScriptBytecodeAdapter {
                 }
                 throw new IllegalArgumentException(error);
             }
-            spreadPos++;
+            ++spreadsPos;
         }
-        for (; argsPos < args.length; argsPos++) {
+        for (; argsPos < args.length; ++argsPos) {
             ret.add(args[argsPos]);
         }
         return ret.toArray();

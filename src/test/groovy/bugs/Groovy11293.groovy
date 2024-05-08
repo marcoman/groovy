@@ -16,27 +16,37 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-package org.codehaus.groovy.transform.traitx
+package bugs
 
-import groovy.test.GroovyTestCase
+import org.junit.Test
 
-class Groovy7214Bug extends GroovyTestCase {
-    void testShouldAllowPrivateStaticMethodCallInTrait() {
+import static groovy.test.GroovyAssert.assertScript
+
+final class Groovy11293 {
+    @Test
+    void testVarargs() {
         assertScript '''
-            trait SomeTrait {
-                private static int magic = 0
+            import java.nio.file.FileSystems
 
-                static getSomeValue() {
-                    someHelperMethod()
-                    magic
-                }
-
-                private static someHelperMethod() {
-                    magic = 42
+            class Groovy11293 {
+                static void main(String[] args) {
+                    FileSystems.default.getPath('root.txt')
                 }
             }
-            class SomeClass implements SomeTrait {}
+        '''
+    }
 
-            assert SomeClass.someValue == 42'''
+    @Test
+    void testVarargs_CS() {
+        assertScript '''
+            import java.nio.file.FileSystems
+
+            @groovy.transform.CompileStatic
+            class Groovy11293 {
+                static void main(String[] args) {
+                    FileSystems.default.getPath('root.txt')
+                }
+            }
+        '''
     }
 }

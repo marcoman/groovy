@@ -61,11 +61,11 @@ public class GenericsVisitor extends ClassCodeVisitorSupport {
 
     @Override
     public void visitClass(final ClassNode node) {
-        ClassNode sn = node.getUnresolvedSuperClass(false);
-        if (checkWildcard(sn)) return;
+        ClassNode sc = node.getUnresolvedSuperClass(false);
+        if (checkWildcard(sc)) return;
 
         boolean isAIC = node instanceof InnerClassNode && ((InnerClassNode) node).isAnonymous();
-        checkGenericsUsage(sn, node.getSuperClass(), isAIC ? Boolean.TRUE : null);
+        checkGenericsUsage(sc, sc.redirect(), isAIC ? Boolean.TRUE : null);
         for (ClassNode face : node.getInterfaces()) {
             checkGenericsUsage(face);
         }
@@ -154,9 +154,9 @@ public class GenericsVisitor extends ClassCodeVisitorSupport {
     private void checkGenericsUsage(final ClassNode cn, final ClassNode rn, final Boolean isAIC) {
         if (cn.isGenericsPlaceHolder()) return;
         GenericsType[] cnTypes = cn.getGenericsTypes();
-        GenericsType[] rnTypes = rn.getGenericsTypes();
         // raw type usage is always allowed
         if (cnTypes == null) return;
+        GenericsType[] rnTypes = rn.getGenericsTypes();
         // you can't parameterize a non-generified type
         if (rnTypes == null) {
             String message = "The class " + cn.toString(false) + " (supplied with " + plural("type parameter", cnTypes.length) +

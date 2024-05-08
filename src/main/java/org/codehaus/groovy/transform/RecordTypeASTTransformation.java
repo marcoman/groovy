@@ -38,7 +38,6 @@ import org.codehaus.groovy.ast.Parameter;
 import org.codehaus.groovy.ast.PropertyNode;
 import org.codehaus.groovy.ast.RecordComponentNode;
 import org.codehaus.groovy.ast.expr.ArgumentListExpression;
-import org.codehaus.groovy.ast.expr.ArrayExpression;
 import org.codehaus.groovy.ast.expr.ClassExpression;
 import org.codehaus.groovy.ast.expr.Expression;
 import org.codehaus.groovy.ast.expr.MapEntryExpression;
@@ -66,7 +65,6 @@ import java.beans.SimpleBeanInfo;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -85,6 +83,7 @@ import static org.codehaus.groovy.ast.ClassHelper.long_TYPE;
 import static org.codehaus.groovy.ast.ClassHelper.make;
 import static org.codehaus.groovy.ast.ClassHelper.makeWithoutCaching;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.args;
+import static org.codehaus.groovy.ast.tools.GeneralUtils.arrayX;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.assignS;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.bytecodeX;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.callThisX;
@@ -130,13 +129,12 @@ import static org.objectweb.asm.Opcodes.IRETURN;
 @GroovyASTTransformation(phase = CompilePhase.SEMANTIC_ANALYSIS)
 public class RecordTypeASTTransformation extends AbstractASTTransformation implements CompilationUnitAware {
 
-    private static final ClassNode ARRAYLIST_TYPE = makeWithoutCaching(ArrayList.class, false);
     private static final ClassNode ILLEGAL_ARGUMENT = makeWithoutCaching(IllegalArgumentException.class);
-    private static final ClassNode LHMAP_TYPE = makeWithoutCaching(LinkedHashMap.class, false);
     private static final ClassNode NAMED_PARAM_TYPE = make(NamedParam.class);
     private static final ClassNode RECORD_OPTIONS_TYPE = make(RecordOptions.class);
     private static final ClassNode SIMPLE_BEAN_INFO_TYPE = make(SimpleBeanInfo.class);
     private static final ClassNode BEAN_DESCRIPTOR_TYPE = make(BeanDescriptor.class);
+    private static final ClassNode COLLECTIONS_TYPE = makeWithoutCaching(Collections.class, false);
     private static final ClassNode PROPERTY_DESCRIPTOR_TYPE = make(PropertyDescriptor.class);
     private static final ClassNode PROPERTY_DESCRIPTOR_ARRAY_TYPE = make(PropertyDescriptor[].class);
     private static final ClassNode EVENT_SET_DESCRIPTOR_TYPE = make(EventSetDescriptor.class);
@@ -312,7 +310,7 @@ public class RecordTypeASTTransformation extends AbstractASTTransformation imple
         }
 
         if ((options == null || !memberHasValue(options, SIZE, Boolean.FALSE)) && !hasDeclaredMethod(cNode, SIZE, 0)) {
-            addGeneratedMethod(cNode, SIZE, ACC_PUBLIC | ACC_FINAL, int_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, returnS(constX(pList.size())));
+            addGeneratedMethod(cNode, SIZE, ACC_PUBLIC | ACC_FINAL, int_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, returnS(constX(pList.size(), true)));
         }
     }
 
@@ -325,7 +323,7 @@ public class RecordTypeASTTransformation extends AbstractASTTransformation imple
         BlockStatement block = new BlockStatement();
         VariableExpression p = varX("p", PROPERTY_DESCRIPTOR_ARRAY_TYPE);
         block.addStatement(
-            declS(p, new ArrayExpression(PROPERTY_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(pList.size()))))
+            declS(p, arrayX(PROPERTY_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(pList.size()))))
         );
         for (int i = 0; i < pList.size(); i++) {
             String name = pList.get(i).getName();
@@ -336,10 +334,10 @@ public class RecordTypeASTTransformation extends AbstractASTTransformation imple
         block.addStatement(returnS(p));
         beanInfoClass.addMethod("getPropertyDescriptors", ACC_PUBLIC, PROPERTY_DESCRIPTOR_ARRAY_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, block);
         beanInfoClass.addMethod("getEventSetDescriptors", ACC_PUBLIC, EVENT_SET_DESCRIPTOR_ARRAY_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, returnS(
-            new ArrayExpression(EVENT_SET_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(0)))
+            arrayX(EVENT_SET_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(0)))
         ));
         beanInfoClass.addMethod("getMethodDescriptors", ACC_PUBLIC, METHOD_DESCRIPTOR_ARRAY_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, returnS(
-            new ArrayExpression(METHOD_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(0)))
+            arrayX(METHOD_DESCRIPTOR_TYPE, Collections.emptyList(), List.of(constX(0)))
         ));
         beanInfoClass.addMethod("getDefaultPropertyIndex", ACC_PUBLIC, int_TYPE, Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, returnS(
             constX(-1)
@@ -379,7 +377,7 @@ public class RecordTypeASTTransformation extends AbstractASTTransformation imple
         for (PropertyNode pNode : pList) {
             args.add(callThisX(pNode.getName()));
         }
-        Statement body = returnS(ctorX(ARRAYLIST_TYPE.getPlainNodeReference(), listX(args)));
+        Statement body = returnS(callX(COLLECTIONS_TYPE, "unmodifiableList", listX(args)));
         addGeneratedMethod(cNode, TO_LIST, ACC_PUBLIC | ACC_FINAL, LIST_TYPE.getPlainNodeReference(), Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, body);
     }
 
@@ -389,7 +387,7 @@ public class RecordTypeASTTransformation extends AbstractASTTransformation imple
             String name = pNode.getName();
             entries.add(mapEntryX(name, callThisX(name)));
         }
-        Statement body = returnS(ctorX(LHMAP_TYPE.getPlainNodeReference(), args(mapX(entries))));
+        Statement body = returnS(callX(COLLECTIONS_TYPE, "unmodifiableMap", mapX(entries)));
         addGeneratedMethod(cNode, TO_MAP, ACC_PUBLIC | ACC_FINAL, MAP_TYPE.getPlainNodeReference(), Parameter.EMPTY_ARRAY, ClassNode.EMPTY_ARRAY, body);
     }
 

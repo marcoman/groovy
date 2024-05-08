@@ -34,10 +34,11 @@ import org.codehaus.groovy.control.CompilePhase;
 import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.macro.methods.MacroGroovyMethods;
 import org.codehaus.groovy.macro.runtime.MacroBuilder;
+import org.codehaus.groovy.runtime.DefaultGroovyMethods;
 import org.codehaus.groovy.transform.GroovyASTTransformation;
 
-import java.util.Iterator;
 import java.util.List;
+import java.util.logging.Logger;
 
 import static org.codehaus.groovy.ast.tools.GeneralUtils.args;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.callX;
@@ -56,6 +57,7 @@ public class MacroClassTransformation extends MethodCallTransformation {
 
     private static final String MACRO_METHOD = "macro";
     private static final ClassNode MACROCLASS_TYPE = ClassHelper.make(MacroClass.class);
+    private static final Logger LOGGER = Logger.getLogger(MacroClassTransformation.class.getName());
 
     @Override
     protected GroovyCodeVisitor getTransformer(final ASTNode[] nodes, final SourceUnit sourceUnit) {
@@ -122,15 +124,9 @@ public class MacroClassTransformation extends MethodCallTransformation {
                         macroCall.setImplicitThis(false);
                         call.putNodeMetaData(MacroTransformation.class, macroCall);
                         List<ClassNode> classes = sourceUnit.getAST().getClasses();
-                        for (Iterator<ClassNode> iterator = classes.iterator(); iterator.hasNext(); ) {
-                            final ClassNode aClass = iterator.next();
-                            if (aClass == type || type == aClass.getOuterClass()) {
-                                iterator.remove();
-                            }
-                        }
+                        classes.removeIf(aClass -> aClass == type || type == aClass.getOuterClass());
                     } catch (Exception e) {
-                        // FIXME
-                        e.printStackTrace();
+                        LOGGER.warning(DefaultGroovyMethods.asString(e));
                     }
                     return;
                 }

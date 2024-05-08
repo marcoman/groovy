@@ -18,12 +18,13 @@
  */
 package org.codehaus.groovy.tools.stubgenerator
 
-import groovy.test.GroovyTestCase
-import com.thoughtworks.qdox.JavaDocBuilder
+import com.thoughtworks.qdox.JavaProjectBuilder
 import com.thoughtworks.qdox.model.JavaClass
 import org.codehaus.groovy.control.CompilationFailedException
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.tools.javac.JavaAwareCompilationUnit
+
+import groovy.test.GroovyTestCase
 
 import static groovy.io.FileType.*
 
@@ -59,7 +60,7 @@ abstract class StubTestCase extends GroovyTestCase {
 
     protected File sourceRootPath
 
-    protected JavaDocBuilder qdox = new JavaDocBuilder()
+    protected JavaProjectBuilder qdox = new JavaProjectBuilder()
 
     protected GroovyClassLoader loader
     protected CompilerConfiguration config = new CompilerConfiguration()
@@ -72,8 +73,7 @@ abstract class StubTestCase extends GroovyTestCase {
      */
     @Override
     protected void setUp() {
-        // TODO: commented super.setUp() as it generates a stackoverflow, for some reason?!
-        // super.setUp()
+        super.setUp()
         if (debug) {
             println """\
                 Stub generator test [${this.class.name}]
@@ -90,7 +90,7 @@ abstract class StubTestCase extends GroovyTestCase {
      */
     @Override
     protected void tearDown() {
-        if(delete) {
+        if (delete) {
             if (debug) println "Deleting temporary folders"
             targetDir.deleteDir()
             stubDir.deleteDir()
@@ -114,7 +114,8 @@ abstract class StubTestCase extends GroovyTestCase {
      *     }
      * </code></pre>
      */
-    protected void init() {}
+    protected void init() {
+    }
 
     /**
      * @return the folder containing the sample Groovy and Java sources for the test
@@ -162,8 +163,8 @@ abstract class StubTestCase extends GroovyTestCase {
             compile(sources)
 
             // use QDox for parsing the Java stubs and Java sources
-            qdox.addSourceTree sourceRootPath
-            qdox.addSourceTree stubDir
+            qdox.addSourceTree(sourceRootPath)
+            qdox.addSourceTree(stubDir)
 
             if (debug) {
                 println ">>> Stubs generated"
@@ -196,7 +197,7 @@ abstract class StubTestCase extends GroovyTestCase {
                 }
                 throw e
             }
-            if (sourceRootPath.getAbsolutePath() =~ 'stubgentests') {
+            if (sourceRootPath.absolutePath =~ 'stubgentests') {
                 sourceRootPath.deleteDir()
             }
         }
@@ -266,7 +267,7 @@ abstract class StubTestCase extends GroovyTestCase {
     /**
      * All tests must implement this method, for doing
      */
-    abstract void verifyStubs()
+    protected abstract void verifyStubs()
 
     /**
      * Method providing a useful shortcut for the subclasses, so that you can use <code>classes</code>
@@ -275,7 +276,7 @@ abstract class StubTestCase extends GroovyTestCase {
      * @return an array of QDox' <code>JavaClass</code>es.
      */
     protected JavaClass[] getClasses() {
-        qdox.classes
+        qdox.classes as JavaClass[]
     }
 
     /**
@@ -310,18 +311,18 @@ abstract class StubTestCase extends GroovyTestCase {
     protected static void createNecessaryPackageDirs(File path, String relativeFilePath) {
         def index = relativeFilePath.lastIndexOf('/')
 
-        if(index < 0) return
+        if (index < 0) return
 
         def relativeDirectories = relativeFilePath.substring(0, index)
 
         def tmpPath = path.absolutePath
 
         relativeDirectories.split('/').each {
-            if(!tmpPath.endsWith(File.separator)) {
+            if (!tmpPath.endsWith(File.separator)) {
                 tmpPath = tmpPath + File.separator
             }
             File newDir = new File(tmpPath + it)
-            if(!newDir.exists()) {
+            if (!newDir.exists()) {
                 if (!(newDir.mkdir())) {
                     throw new IOException("Impossible to create package directory: ${newDir.absolutePath}")
                 }

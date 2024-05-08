@@ -16,25 +16,8 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-package groovy.bugs
+package org.codehaus.groovy.tools.groovydoc.testfiles.props
 
-import groovy.test.GroovyTestCase
-
-class Groovy7797Bug extends GroovyTestCase {
-    void test() {
-        new GroovyShell().evaluate('''
-trait MyTrait {
-    void greeter() {
-        { ->doGreeting("hi") }.call()
-        //doGreeting("hi")
-    }
-
-    private void doGreeting(String message) { println message }
+class GrandParent {
+    String fooGP
 }
-
-class MyClass implements MyTrait {}
-new MyClass().greeter()
-''')
-    }
-}
-

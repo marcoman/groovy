@@ -1,0 +1,370 @@
+//////////////////////////////////////////
+
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  KIND, either express or implied.  See the License for the
+  specific language governing permissions and limitations
+  under the License.
+
+//////////////////////////////////////////
+ifndef::reldir_typecheckers[]
+:reldir_typecheckers: .
+endif::[]
+
+= Built-in auxiliary type checkers
+
+== Introduction
+
+Groovy's static nature includes an extensible type-checking mechanism.
+This mechanism allows users to selectively strengthen or weaken type checking
+as needed to cater for scenarios where the standard type checking isn't sufficient.
+
+In addition to allowing you to write your own customer checkers,
+Groovy offers a handful of useful built-in type checkers.
+These provide additional checks for specific scenarios.
+
+In the examples which follow, we'll explicitly show declaring
+the type checker we want to use.
+As usual, Groovy's compiler customization mechanisms would allow you to
+simplify application of such checkers, e.g. make it apply globally
+using a compiler configuration script, as just one example.
+
+== Checking Regular Expressions
+
+A regular expression (regex) defines a search pattern for text. The pattern can be as simple as a single character, a fixed string, or a complex expression containing special characters describing a pattern.
+The JDK has special regex classes and Groovy adds some special syntactic sugar and functionality
+on top of the JDK classes.
+
+Here is an example the checks that the String 'Foo'
+matches a regular expression:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=intro_example,indent=0]
+----
+
+The regex pattern is made up of three parts:
+
+* `[Ff]` is a character class matching upper or lowercase 'f',
+* `.{2}` means exactly two occurrences of the `.` character class which matches any character
+* `\b` matches a word boundary
+
+There are more options we could add here such as grouping, lookahead and look-behind, to name just a few.
+With so many options and special characters, it isn't hard to create an invalid regular expression pattern.
+Such invalid patterns are typically found at runtime with a runtime exception.
+
+The goal of the `RegexChecker` is to find such errors at compile-time.
+If compilation of the expressions succeeds, they are guaranteed not to fail at runtime.
+
+=== Typical usage
+
+The previous example can be type checked as follows:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=checked_example,indent=0]
+----
+
+If you have many examples where such checking is desirable,
+you could consider automatically adding this extension to your compilation process.
+
+=== Covered methods
+
+The methods which are checked include:
+
+|===
+a|`java.util.regex.Pattern`
+[source,groovy]
+----
+static Pattern compile(String regex)
+static Pattern compile(String regex, int flags)
+static boolean matches(String regex, CharSequence input)
+----
+a|`java.util.regex.Matcher`
+[source,groovy]
+----
+String group(int group)
+matcher[matchCount][groupCount]  // getAt shorthand
+----
+a|Operators
+[source,groovy]
+----
+~/regex/                 // pattern operator
+'string' =~ /regex/      // find operator
+'string' ==~ /regex/     // (exact) match operator
+----
+|===
+
+The RegexChecker will check any method calls listed above.
+It might find such methods when they involve explicit static
+method calls or when the receiver's type can be inferred.
+
+The regular expression must be a _constant-like_ String.
+Any group-count values must be a _constant-like_ integer.
+By _constant-like_, we mean, either an explicit String literal,
+or a field with an initializer expression or a local variable
+with an initializer expression. These possibilities are shown in
+the following code, which contains 3 regular expressions:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=introduction_example,indent=0]
+----
+<1> A constant String regex
+<2> Using the constant regex with the find operator
+<3> Checking the matcher's second group
+<4> A local variable containing a regex pattern
+<5> Using the pattern with grep
+<6> An API call passing a String literal regex
+
+=== Errors detected
+
+Luckily, in the above example, we made no errors in our regex definitions, and the code compiles and executes successfully.
+
+If however, we did make certain errors in those definitions, then we would expect the potential of runtime errors. Using `RegexChecker`, we can
+find certain kinds of errors during compilation.
+Let's look at some examples.
+
+Suppose at &#x2778; we looked for the third group instead of the second:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=invalid_group_count,indent=0]
+----
+
+We would see the following error at compile-time:
+
+----
+include::../test/RegexCheckerTest.groovy[tags=invalid_group_count_message,indent=0]
+----
+
+Alternatively, suppose at &#x2779; we accidentally left off the closing curly brace:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=unclosed_counted_closure,indent=0]
+----
+
+We would see the following error at compile-time:
+
+----
+include::../test/RegexCheckerTest.groovy[tags=unclosed_counted_closure_message,indent=0]
+----
+
+Alternatively, suppose at &#x277B; we accidentally left off the closing round bracket for the last (day of month) group:
+
+[source,groovy]
+----
+include::../test/RegexCheckerTest.groovy[tags=unclosed_group,indent=0]
+----
+
+We would see the following error at compile-time:
+
+[source]
+----
+include::../test/RegexCheckerTest.groovy[tags=unclosed_group_message,indent=0]
+----
+
+Over-and-above these examples, detected errors include:
+
+* Bad class syntax
+* Bad named capturing group
+* Dangling meta character
+* Empty character family
+* Illegal character range
+* Illegal repetition
+* Illegal/unsupported escape sequence
+* Look-behind group does not have an obvious maximum length
+* Unexpected character
+* Unclosed character family
+* Unclosed character class
+* Unclosed counted closure
+* Unclosed group
+* Unknown character property name
+* Unknown Unicode property
+* Unknown group type
+* Unknown inline modifier
+* Unknown character name
+* Unmatched closing ')'
+
+== Checking Format Strings
+
+The `format` methods in `java.util.Formatter`, and other similar methods,
+support formatted printing in the style of C's `printf` method with a
+format string and zero or more arguments.
+
+Let's consider an example which produces a string comprised of three terms:
+
+* a floating-point representation (`%f`) of PI (with 2 decimal places of precision),
+* the hex representation (`%X`) of 15 (as two uppercase digits with a leading 0),
+* and the Boolean (`%B`) `True` (in uppercase).
+
+The assertion checks our expectations:
+
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=intro_example,indent=0]
+----
+
+This is a powerful method supporting numerous conversions and flags.
+If the developer supplies incorrect conversions or flags,
+they will receive one of numerous possible runtime errors.
+As examples, consider the following mistakes and resulting runtime exceptions:
+
+* supplying a String as the parameter for either of the first two arguments results in an
+`IllegalFormatConversionException`,
+* leaving out the last argument results in a
+`MissingFormatArgumentException`,
+* supplying the _leading zero_ flag for the Boolean parameter results in a
+`FlagsConversionMismatchException`.
+
+The goal of the `FormatStringChecker` is to eliminate
+a large number of such runtime errors. If the API call passes type checking,
+it will be guaranteed to succeed at runtime.
+
+=== Typical usage
+
+Here is an example of correctly using some of these methods with type checking in place:
+
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=valid_format_string_example,indent=0]
+----
+
+Over and above these methods, if you have your own method of this style,
+you can annotate it with `@FormatMethod`, and it will also be checked.
+
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=format_method_example,indent=0]
+----
+
+You can use the `FormatMethod` annotation provided in the `groovy-typecheckers`
+module or the https://checkerframework.org/api/org/checkerframework/checker/formatter/qual/FormatMethod.html[similarly named] annotation from the Java-based https://checkerframework.org/[checker framework].
+
+=== Covered methods
+
+The format string methods have the following characteristics:
+
+* The first argument must be of type `java.util.Locale` or `java.lang.String`.
+* If the first argument is of type `Locale`, the second argument must be of type `String`.
+* The `String` argument is treated as a format string containing zero or more embedded format specifiers as well as plain text. The format specifiers determine how the remaining arguments will be used within the resulting output.
+
+The `FormatStringChecker` ensures that the format string is valid and the remaining arguments are compatible with the embedded format specifiers.
+
+The methods which are checked include:
+
+|===
+a|`java.lang.String`
+[source,groovy]
+----
+static String format(String format, Object... args)
+static String format(Locale l, String format, Object... args)
+String formatted(Object... args)  // JDK15+
+----
+a|`java.util.Formatter`
+[source,groovy]
+----
+String format(String format, Object... args)
+String format(Locale l, String format, Object... args)
+----
+a|`java.io.PrintStream`
+[source,groovy]
+----
+PrintStream printf(String format, Object... args)
+PrintStream printf(Locale l, String format, Object... args)
+----
+a|DGM methods
+[source,groovy]
+----
+printf(String format, Object... args)
+printf(Locale l, String format, Object... args)
+sprintf(String format, Object... args)
+sprintf(Locale l, String format, Object... args)
+----
+|===
+
+The format string checker looks for a constant literal
+format string. For arguments, it also looks for constant
+literals or otherwise makes checks based on inferred type.
+When looking for constants, the checker will find inline
+literals, local variables with a constant initializer,
+and fields with a constant initializer. Here are some examples:
+
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=valid_format_string_variations,indent=0]
+----
+<1> Constant literals
+<2> Fields with an initializer
+<3> Local variables with an initializer
+<4> Checking of the parameter will be based on inferred type
+
+=== Errors detected
+
+Here are some examples of the kinds of errors detected.
+
+* The arguments much match the type of the format classifier, e.g. we can't
+use the character classifier with a boolean argument:
++
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=illegal_format_conversion,indent=0]
+----
++
+We would see the following error at compile-time:
++
+[source]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=illegal_format_conversion_message,indent=0]
+----
+
+* We shouldn't specify precision for non-scientific arguments, e.g. we shouldn't
+expect 7 decimal places of precision for an integral value:
++
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=illegal_format_precision,indent=0]
+----
++
+We would see the following error at compile-time:
++
+[source]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=illegal_format_precision_message,indent=0]
+----
+
+* We should specify only known format specifier conversions, e.g. `v` isn't known:
++
+[source,groovy]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=unknown_format_conversion,indent=0]
+----
++
+We would see the following error at compile-time:
++
+[source]
+----
+include::../test/FormatStringCheckerTest.groovy[tags=unknown_format_conversion_message,indent=0]
+----
+
+The complete list of errors detected include:
+
+* duplicate format flags
+* illegal format flags
+* illegal format precision values
+* unknown format conversions
+* illegal format conversions
+* format flags conversion mismatches
+* missing arguments

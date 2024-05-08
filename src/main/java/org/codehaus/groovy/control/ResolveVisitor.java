@@ -332,7 +332,7 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
         if (type.isRedirectNode() || !type.isPrimaryClassNode()) {
             visitTypeAnnotations(type); // JSR 308 support
         }
-        if (preferImports) {
+        if (preferImports && !type.isResolved() && !type.isPrimaryClassNode()) {
             resolveGenericsTypes(type.getGenericsTypes());
             if (resolveAliasFromModule(type)) return;
         }
@@ -597,9 +597,9 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
     }
 
     private boolean resolveAliasFromModule(final ClassNode type) {
-        // In case of getting a ConstructedClassWithPackage here we do not do checks for partial
-        // matches with imported classes. The ConstructedClassWithPackage is already a constructed
-        // node and any subclass resolving will then take place elsewhere
+        // In case of getting a ConstructedClassWithPackage here we do not check
+        // for partial matches with imported classes. ConstructedClassWithPackage
+        // is already a constructed node and subclass resolving takes place elsewhere.
         if (type instanceof ConstructedClassWithPackage) return false;
 
         ModuleNode module = currentClass.getModule();
@@ -666,50 +666,47 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
     }
 
     protected boolean resolveFromModule(final ClassNode type, final boolean testModuleImports) {
-        if (type instanceof ConstructedNestedClass) return false;
+        ModuleNode module = currentClass.getModule();
+        if (module == null) return false;
 
-        // we decided if we have a vanilla name starting with a lower case
+        if (type instanceof ConstructedNestedClass) return false;
+        // We decided if we have a vanilla name starting with a lower case
         // letter that we will not try to resolve this name against .*
         // imports. Instead a full import is needed for these.
         // resolveAliasFromModule will do this check for us. This method
         // does also check the module contains a class in the same package
         // of this name. This check is not done for vanilla names starting
-        // with a lower case letter anymore
-        if (type instanceof LowerCaseClass) {
-            return resolveAliasFromModule(type);
-        }
+        // with a lower case letter anymore.
+        if (type instanceof LowerCaseClass) return resolveAliasFromModule(type);
 
         String name = type.getName();
-        ModuleNode module = currentClass.getModule();
-        if (module == null) return false;
-
-        boolean newNameUsed = false;
-        // we add a package if there is none yet and the module has one. But we
+        boolean type_setName = false;
+        // We add a package if there is none yet and the module has one. But we
         // do not add that if the type is a ConstructedClassWithPackage. The code in ConstructedClassWithPackage
         // hasPackageName() will return true if ConstructedClassWithPackage#className has no dots.
-        // but since the prefix may have them and the code there does ignore that
-        // fact. We check here for ConstructedClassWithPackage.
+        // but since the prefix may have them and the code there does ignore that fact.
         if (!type.hasPackageName() && module.hasPackageName() && !(type instanceof ConstructedClassWithPackage)) {
             type.setName(module.getPackageName() + name);
-            newNameUsed = true;
+            type_setName = true;
         }
-        // look into the module node if there is a class with that name
-        List<ClassNode> moduleClasses = module.getClasses();
-        for (ClassNode mClass : moduleClasses) {
-            if (mClass.getName().equals(type.getName())) {
-                if (mClass != type) type.setRedirect(mClass);
+        // check the module node for a class with the name
+        for (ClassNode localClass : module.getClasses()) {
+            if (localClass.getName().equals(type.getName())) {
+                if (localClass != type) type.setRedirect(localClass);
                 return true;
             }
         }
-        if (newNameUsed) type.setName(name);
+        if (type_setName) type.setName(name);
 
         if (testModuleImports) {
-            if (resolveAliasFromModule(type)) return true;
-
+            // check regular imports
+            if (resolveAliasFromModule(type)) {
+                return true;
+            }
+            // check enclosing package
             if (module.hasPackageName()) {
-                // check package this class is defined in. The usage of ConstructedClassWithPackage here
-                // means, that the module package will not be involved when the
-                // compiler tries to find an inner class.
+                // The usage of ConstructedClassWithPackage indicates the module
+                // package will not be involved when the compiler tries to find an inner class.
                 ClassNode tmp = new ConstructedClassWithPackage(module.getPackageName(), name);
                 if (resolve(tmp, false, false, false)) {
                     ambiguousClass(type, tmp, name);
@@ -949,15 +946,14 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
 
     private boolean directlyImplementsTrait(final ClassNode trait) {
         ClassNode[] interfaces = currentClass.getInterfaces();
-        if (interfaces == null) {
-            return currentClass.getSuperClass().equals(trait);
-        }
-        for (ClassNode node : interfaces) {
-            if (node.equals(trait)) {
-                return true;
+        if (interfaces != null) {
+            for (ClassNode face : interfaces) {
+                if (face.equals(trait)) {
+                    return true;
+                }
             }
         }
-        return currentClass.getSuperClass().equals(trait);
+        return currentClass.getUnresolvedSuperClass().equals(trait);
     }
 
     private void checkThisAndSuperAsPropertyAccess(final PropertyExpression expression) {
@@ -967,7 +963,7 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
         if (!prop.equals("this") && !prop.equals("super")) return;
 
         ClassNode type = expression.getObjectExpression().getType();
-        if (expression.getObjectExpression() instanceof ClassExpression && !isSuperCallToDefaultMethod(expression)) {
+        if (expression.getObjectExpression() instanceof ClassExpression && !isSuperCallToDefaultMethod(expression) && !isThisCallToPrivateInterfaceMethod(expression)) {
             if (!(currentClass instanceof InnerClassNode) && !Traits.isTrait(type)) {
                 addError("The usage of 'Class.this' and 'Class.super' is only allowed in nested/inner classes.", expression);
                 return;
@@ -995,6 +991,12 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
         // a more sophisticated check might be required in the future
         ClassExpression clazzExpression = (ClassExpression) expression.getObjectExpression();
         return clazzExpression.getType().isInterface() && expression.getPropertyAsString().equals("super");
+    }
+
+    private boolean isThisCallToPrivateInterfaceMethod(PropertyExpression expression) {
+        // a more sophisticated check might be required in the future
+        ClassExpression clazzExpression = (ClassExpression) expression.getObjectExpression();
+        return clazzExpression.getType().isInterface() && expression.getPropertyAsString().equals("this");
     }
 
     protected Expression transformVariableExpression(final VariableExpression ve) {
@@ -1293,15 +1295,6 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
             for (ClassNode in : node.getInterfaces()) {
                 checkCyclicInheritance(node, in);
             }
-            if (node.getGenericsTypes() != null) {
-                for (GenericsType gt : node.getGenericsTypes()) {
-                    if (gt != null && gt.getUpperBounds() != null) {
-                        for (ClassNode variant : gt.getUpperBounds()) {
-                            if (variant.isGenericsPlaceHolder()) checkCyclicInheritance(variant, gt.getType());
-                        }
-                    }
-                }
-            }
           case 2:
             // VariableScopeVisitor visits anon. inner class body inline, so resolve now
             for (Iterator<InnerClassNode> it = node.getInnerClasses(); it.hasNext(); ) {
@@ -1399,18 +1392,15 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
     }
 
     private void resolveGenericsHeader(final GenericsType[] types) {
-        resolveGenericsHeader(types, null, 0);
+        if (types != null) resolveGenericsHeader(types, null, 0);
     }
 
     private void resolveGenericsHeader(final GenericsType[] types, final GenericsType rootType, final int level) {
-        if (types == null) return;
         currentClass.setUsingGenerics(true);
-        List<Tuple2<ClassNode, GenericsType>> upperBoundsWithGenerics = new LinkedList<>();
         List<Tuple2<ClassNode, ClassNode>> upperBoundsToResolve = new LinkedList<>();
+        List<Tuple2<ClassNode, GenericsType>> upperBoundsWithGenerics = new LinkedList<>();
         for (GenericsType type : types) {
-            if (level > 0 && type.getName().equals(rootType.getName())) {
-                continue;
-            }
+            if (level > 0 && type.getName().equals(rootType.getName())) continue; // cycle!
 
             String name = type.getName();
             ClassNode typeType = type.getType();
@@ -1422,7 +1412,7 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
             if (type.getUpperBounds() != null) {
                 boolean nameAdded = false;
                 for (ClassNode upperBound : type.getUpperBounds()) {
-                    if (upperBound == null) continue;
+                    if (upperBound == null) continue; // TODO: error
 
                     if (!isWildcardGT) {
                         if (!nameAdded || !resolve(typeType)) {
@@ -1435,29 +1425,29 @@ public class ResolveVisitor extends ClassCodeExpressionTransformer {
                         }
                         upperBoundsToResolve.add(tuple(upperBound, typeType));
                     }
-                    if (upperBound.isUsingGenerics()) {
+                    if (upperBound.getGenericsTypes() != null) {
                         upperBoundsWithGenerics.add(tuple(upperBound, type));
                     }
                 }
-            } else if (!isWildcardGT) {
-                if (dealWithGenerics) {
-                    type.setPlaceholder(true);
-                    GenericsType last = genericParameterNames.put(gtn, type);
-                    typeType.setRedirect(last != null ? last.getType().redirect() : ClassHelper.OBJECT_TYPE);
-                }
+            } else if (dealWithGenerics && !isWildcardGT) {
+                type.setPlaceholder(true);
+                GenericsType last = genericParameterNames.put(gtn, type);
+                typeType.setRedirect(last != null ? last.getType().redirect() : ClassHelper.OBJECT_TYPE);
             }
         }
 
-        for (Tuple2<ClassNode, ClassNode> tp : upperBoundsToResolve) {
-            ClassNode upperBound = tp.getV1();
-            ClassNode classNode = tp.getV2();
-            resolveOrFail(upperBound, classNode);
+        for (var tuple : upperBoundsToResolve) {
+            ClassNode upperBound = tuple.getV1();
+            ClassNode sourceType = tuple.getV2();
+            resolveOrFail(upperBound, sourceType);
+            if (upperBound.isGenericsPlaceHolder()) {
+                checkCyclicInheritance(upperBound, sourceType); // GROOVY-10113,GROOVY-10998
+            }
         }
 
-        for (Tuple2<ClassNode, GenericsType> tp : upperBoundsWithGenerics) {
-            ClassNode upperBound = tp.getV1();
-            GenericsType gt = tp.getV2();
-            resolveGenericsHeader(upperBound.getGenericsTypes(), 0 == level ? gt : rootType, level + 1);
+        for (var tuple : upperBoundsWithGenerics) {
+            GenericsType[] bounds = tuple.getV1().getGenericsTypes();
+            resolveGenericsHeader(bounds, level == 0 ? tuple.getV2() : rootType, level + 1);
         }
     }
 

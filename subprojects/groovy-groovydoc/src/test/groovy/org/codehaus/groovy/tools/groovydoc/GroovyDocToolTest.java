@@ -685,7 +685,7 @@ public class GroovyDocToolTest extends GroovyTestCase {
         assertEquals("There has to be a reference to class Enum", "Enum", m.group(3));
     }
 
-    public void testEnumInitNotDocumented() throws Exception {
+    public void testEnumConstantsDocumentedAndInitNotDocumented() throws Exception {
         final String base = "org/codehaus/groovy/tools/groovydoc/testfiles";
         final String klass = "EnumWithDeprecatedConstants";
         htmlTool.add(Arrays.asList(
@@ -696,6 +696,7 @@ public class GroovyDocToolTest extends GroovyTestCase {
         htmlTool.renderToOutput(output, MOCK_DIR);
 
         final String groovydoc = output.getText(MOCK_DIR + "/" + base + "/"+ klass +".html");
+        assertTrue(groovydoc.matches("(?s).*<table .*summary=\"Enum constants summary table\".*>bar<.*<\\/table>.*"));
 
         final Matcher ctor = Pattern.compile(Pattern.quote("$INIT")).matcher(groovydoc);
 
@@ -773,6 +774,26 @@ public class GroovyDocToolTest extends GroovyTestCase {
         assertTrue("Test interface should extends List", extendedClass.find());
 
         assertEquals("Classes from imported packages should shadow classes from default packages", "a/List", extendedClass.group(1));
+    }
+
+    public void testInheritedProperties() throws Exception {
+        htmlTool.add(Arrays.asList(
+                "org/codehaus/groovy/tools/groovydoc/testfiles/props/Child.groovy",
+                "org/codehaus/groovy/tools/groovydoc/testfiles/props/Parent.groovy",
+                "org/codehaus/groovy/tools/groovydoc/testfiles/props/GrandParent.groovy"
+        ));
+
+        final MockOutputTool output = new MockOutputTool();
+        htmlTool.renderToOutput(output, MOCK_DIR);
+        final String childDoc = output.getText(MOCK_DIR + "/org/codehaus/groovy/tools/groovydoc/testfiles/props/Child.html");
+
+        final Matcher inheritedProperties = Pattern.compile("(?s)<span>Inherited properties</span>" +
+            ".*<a href='[./]*/org/codehaus/groovy/tools/groovydoc/testfiles/props/Parent.html'>Parent</a>.*<code>(\\w*)</code>" +
+            ".*<a href='[./]*/org/codehaus/groovy/tools/groovydoc/testfiles/props/GrandParent.html'>GrandParent</a>.*<code>(\\w*)</code>").matcher(childDoc);
+
+        assertTrue("Should find inherited properties", inheritedProperties.find());
+        assertEquals("Should find Parent property", "fooP", inheritedProperties.group(1));
+        assertEquals("Should find GrandParent property", "fooGP", inheritedProperties.group(2));
     }
 
     public void testJavaExtendsImportedClassWithNameWhichExistInDefaultPackages() throws Exception {

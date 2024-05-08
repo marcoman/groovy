@@ -191,13 +191,13 @@ tasks.named('javadoc') {
 }
 
 tasks.withType(Test).configureEach {
-    jvmArgs /*"-Dgroovy.attach.groovydoc=true", "-Dgroovy.attach.runtime.groovydoc=true",*/ "-Dgroovy.antlr4.cache.threshold=100"
+    jvmArgs /*"-Dgroovy.attach.groovydoc=true", "-Dgroovy.attach.runtime.groovydoc=true",*/ "-Dgroovy.antlr4.cache.threshold=0"
 }
 
 def generateGrammarSourceTask = tasks.named("generateGrammarSource") {
     maxHeapSize = '1g'
     outputs.cacheIf { true }
-    outputDirectory = file("${buildDir}/generated/sources/antlr4")
+    outputDirectory = layout.buildDirectory.dir("generated/sources/antlr4").get().asFile
 
     final PARSER_PACKAGE_NAME = 'org.apache.groovy.parser.antlr4'
     arguments += ["-visitor", "-no-listener", "-package", PARSER_PACKAGE_NAME]

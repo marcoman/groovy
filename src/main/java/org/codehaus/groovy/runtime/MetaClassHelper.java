@@ -25,6 +25,7 @@ import groovy.lang.GroovyRuntimeException;
 import groovy.lang.MetaClass;
 import groovy.lang.MetaMethod;
 import org.apache.groovy.util.BeanUtils;
+import org.codehaus.groovy.classgen.asm.util.TypeUtil;
 import org.codehaus.groovy.reflection.CachedClass;
 import org.codehaus.groovy.reflection.ParameterTypes;
 import org.codehaus.groovy.reflection.ReflectionCache;
@@ -344,15 +345,18 @@ public class MetaClassHelper {
             }
 
             Method sam;
-            for (Class<?> c = ReflectionCache.autoboxType(argument); c != null && c != parameterClass; c = c.getSuperclass()) {
-                if (c == Closure.class && parameterClass.isInterface() && (sam = getSAMMethod(parameterClass)) != null) {
-                    // In the case of multiple overloads, give preference to equal parameter count
-                    // with fuzzy matching of length for implicit arg Closures
-                    int paramCount = getParameterCount(argument);
+            for (Class<?> c = TypeUtil.autoboxType(argument); c != null && c != parameterClass; c = c.getSuperclass()) {
+                if (c == Closure.class && parameterClass.isInterface() && (sam= getSAMMethod(parameterClass)) != null) {
+                    // in case of multiple overloads, give preference to same parameter count
+                    // with fuzzy matching of count for implicit-parameter closures / lambdas
+                    int argParamCount = getParameterCount(argument);
                     int samParamCount = sam.getParameterCount();
-                    if ((paramCount == samParamCount) ||                                   // GROOVY-9881
-                        (paramCount == -1 && (samParamCount == 0 || samParamCount == 1)))  // GROOVY-10905
+                    if ((argParamCount == samParamCount) ||                                  // GROOVY-9881
+                        (argParamCount == -1 && (samParamCount == 0 || samParamCount == 1))) // GROOVY-10905
                         objectDistance -= 1;
+                    else if (argParamCount >= 0)                                             // GROOVY-11121
+                        objectDistance += 2;
+
                     objectDistance += 5; // ahead of Object but behind GroovyObjectSupport
                     break;
                 }
@@ -745,8 +749,8 @@ public class MetaClassHelper {
             return true;
         }
 
-        classToTransformTo = ReflectionCache.autoboxType(classToTransformTo);
-        classToTransformFrom = ReflectionCache.autoboxType(classToTransformFrom);
+        classToTransformTo = TypeUtil.autoboxType(classToTransformTo);
+        classToTransformFrom = TypeUtil.autoboxType(classToTransformFrom);
         if (classToTransformTo == classToTransformFrom) return true;
 
         // note: there is no coercion for boolean and char. Range matters, precision doesn't
@@ -793,7 +797,7 @@ public class MetaClassHelper {
             }
         }
 
-        return ReflectionCache.isAssignableFrom(classToTransformTo, classToTransformFrom);
+        return classToTransformTo.isAssignableFrom(classToTransformFrom);
     }
 
     private static boolean isIntegerLongShortByte(Class classToTransformFrom) {

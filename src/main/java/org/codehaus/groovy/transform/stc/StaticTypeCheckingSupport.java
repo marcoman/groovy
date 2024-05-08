@@ -47,6 +47,7 @@ import org.codehaus.groovy.ast.tools.WideningCategories;
 import org.codehaus.groovy.control.CompilationUnit;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.Phases;
+import org.codehaus.groovy.runtime.ArrayGroovyMethods;
 import org.codehaus.groovy.runtime.BytecodeInterface8;
 import org.codehaus.groovy.runtime.metaclass.MetaClassRegistryImpl;
 import org.codehaus.groovy.syntax.Types;
@@ -147,6 +148,7 @@ import static org.codehaus.groovy.syntax.Types.COMPARE_NOT_INSTANCEOF;
 import static org.codehaus.groovy.syntax.Types.COMPARE_TO;
 import static org.codehaus.groovy.syntax.Types.DIVIDE;
 import static org.codehaus.groovy.syntax.Types.DIVIDE_EQUAL;
+import static org.codehaus.groovy.syntax.Types.IMPLIES;
 import static org.codehaus.groovy.syntax.Types.INTDIV;
 import static org.codehaus.groovy.syntax.Types.INTDIV_EQUAL;
 import static org.codehaus.groovy.syntax.Types.KEYWORD_IN;
@@ -194,8 +196,8 @@ public abstract class StaticTypeCheckingSupport {
             Short_TYPE,   1,
             int_TYPE,     2,
             Integer_TYPE, 2,
-            Long_TYPE,    3,
             long_TYPE,    3,
+            Long_TYPE,    3,
             float_TYPE,   4,
             Float_TYPE,   4,
             double_TYPE,  5,
@@ -469,8 +471,11 @@ public abstract class StaticTypeCheckingSupport {
         if (type == toBeAssignedTo || type == UNKNOWN_PARAMETER_TYPE) return true;
         if (isPrimitiveType(type)) type = getWrapper(type);
         if (isPrimitiveType(toBeAssignedTo)) toBeAssignedTo = getWrapper(toBeAssignedTo);
-        if (NUMBER_TYPES.containsKey(type.redirect()) && NUMBER_TYPES.containsKey(toBeAssignedTo.redirect())) {
-            return NUMBER_TYPES.get(type.redirect()) <= NUMBER_TYPES.get(toBeAssignedTo.redirect());
+        Integer source= NUMBER_TYPES.get(type), target= NUMBER_TYPES.get(toBeAssignedTo);
+        if (source != null && target != null) { return (source.compareTo(target) <= 0); }
+        // GROOVY-8325, GROOVY-8488: float or double can be assigned a BigDecimal literal
+        if (isBigDecimalType(type) && isFloatingCategory(getUnwrapper(toBeAssignedTo))) {
+            return true;
         }
         if (type.isArray() && toBeAssignedTo.isArray()) {
             ClassNode sourceComponent = type.getComponentType(), targetComponent = toBeAssignedTo.getComponentType();
@@ -520,6 +525,7 @@ public abstract class StaticTypeCheckingSupport {
             case MATCH_REGEX:
             case KEYWORD_INSTANCEOF:
             case COMPARE_NOT_INSTANCEOF:
+            case IMPLIES:
                 return true;
             default:
                 return false;
@@ -864,10 +870,9 @@ public abstract class StaticTypeCheckingSupport {
         return true; // possible loss of precision
     }
 
-    static String toMethodParametersString(final String methodName, final ClassNode... parameters) {
-        if (parameters == null || parameters.length == 0) return methodName + "()";
-
-        StringJoiner joiner = new StringJoiner(", ", methodName + "(", ")");
+    static String toMethodParametersString(final String methodName, ClassNode... parameters) {
+        if (parameters == null) parameters = ClassNode.EMPTY_ARRAY;
+        var joiner = new StringJoiner(", ", methodName + "(", ")");
         for (ClassNode parameter : parameters) {
             joiner.add(prettyPrintType(parameter));
         }
@@ -879,6 +884,12 @@ public abstract class StaticTypeCheckingSupport {
      * with trailing "[]".
      */
     static String prettyPrintType(final ClassNode type) {
+        if (type instanceof UnionTypeClassNode) {
+            StringJoiner joiner = new StringJoiner(" or "); // GROOVY-11289
+            for (ClassNode cn : ((UnionTypeClassNode) type).getDelegates())
+                joiner.add(prettyPrintType(cn));
+            return joiner.toString();
+        }
         if (type.getUnresolvedName().charAt(0) == '#') {
             return type.redirect().toString(false);
         }
@@ -886,8 +897,8 @@ public abstract class StaticTypeCheckingSupport {
     }
 
     /**
-     * Returns string representation of type *no* generics. Arrays are indicated
-     * with trailing "[]".
+     * Returns string representation of type without any type arguments. Arrays
+     * are indicated with trailing "[]".
      */
     static String prettyPrintTypeName(final ClassNode type) {
         if (type.isArray()) {
@@ -961,14 +972,15 @@ public abstract class StaticTypeCheckingSupport {
             if (actual.implementsInterface(expect)) {
                 return dist + getMaximumInterfaceDistance(actual, expect);
             } else if (actual.equals(CLOSURE_TYPE) && (sam = findSAM(expect)) != null) {
-                // In the case of multiple overloads, give preference to equal parameter count
-                // with fuzzy matching of length for implicit-argument Closures.
+                // in case of multiple overloads, give preference to same parameter count
+                // with fuzzy matching of count for implicit-parameter closures / lambdas
                 Integer closureParamCount = actual.getNodeMetaData(StaticTypesMarker.CLOSURE_ARGUMENTS);
-                if (closureParamCount != null) {
-                    int samParamCount = sam.getParameters().length;
+                if (closureParamCount != null) { int samParamCount = sam.getParameters().length;
                     if ((closureParamCount == samParamCount) ||                                  // GROOVY-9881
                         (closureParamCount == -1 && (samParamCount == 0 || samParamCount == 1))) // GROOVY-10905
                         dist -= 1;
+                    else if (closureParamCount != -1)
+                        dist += 2; // GROOVY-11121: Object or T may match better
                 }
 
                 return dist + 13; // GROOVY-9852: @FunctionalInterface vs Object
@@ -1197,7 +1209,7 @@ public abstract class StaticTypeCheckingSupport {
                 if (toBeRemoved.contains(two)) continue;
                 if (one.getParameters().length == two.getParameters().length) {
                     ClassNode oneDC = one.getDeclaringClass(), twoDC = two.getDeclaringClass();
-                    if (oneDC == twoDC) {
+                    if (oneDC == twoDC || isSynthetic(one,two)||isSynthetic(two,one)) { // GROOVY-11341
                         if (ParameterUtils.parametersEqual(one.getParameters(), two.getParameters())) {
                             ClassNode oneRT = one.getReturnType(), twoRT = two.getReturnType();
                             if (isCovariant(oneRT, twoRT)) {
@@ -1367,7 +1379,7 @@ public abstract class StaticTypeCheckingSupport {
         }
 
         GenericsType[] gts = type.getGenericsTypes();
-        if (asBoolean(gts)) {
+        if (ArrayGroovyMethods.asBoolean(gts)) {
             gts = gts.clone();
             for (int i = 0, n = gts.length; i < n; i += 1) {
                 GenericsType gt = gts[i];
