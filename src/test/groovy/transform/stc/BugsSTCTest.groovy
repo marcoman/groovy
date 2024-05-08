@@ -115,9 +115,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
     void testShouldDetectInvalidMethodUseWithinTraitWithCompileStaticAndSelfType() {
         shouldFailWithMessages '''
             class C {
-                def m() { }
             }
-            @groovy.transform.CompileStatic
             @groovy.transform.SelfType(C)
             trait T {
                 void test() {
@@ -125,7 +123,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
                 }
             }
         ''',
-        'Cannot find matching method <UnionType:C+T>#x'
+        'Cannot find matching method (C & T)#x()'
     }
 
     // GROOVY-10102
@@ -159,40 +157,6 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             class E implements A, B, C, D { }
             assert new E().test() == 'fooFOO'
         '''
-    }
-
-    // GROOVY-10106
-    void testCallStaticOrPrivateMethodInTraitFieldInitializer() {
-        ['private', 'static', 'private static'].each { mods ->
-            assertScript """
-                class C {
-                    String s
-                }
-                trait T {
-                    final C c = new C().tap {
-                        config(it)
-                    }
-                    $mods void config(C c) {
-                        c.s = 'x'
-                    }
-                }
-                class U implements T {
-                }
-                def c = new U().c
-                assert c.s == 'x'
-            """
-        }
-
-        shouldFailWithMessages '''
-            trait T {
-                def obj = new Object().tap {
-                    config(it)
-                }
-                static void config(String s) {
-                }
-            }
-        ''',
-        'Cannot find matching method T$Trait$Helper#config(java.lang.Class, java.lang.Object)'
     }
 
     void testGroovy5444() {
@@ -268,22 +232,14 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
     }
 
     void testGroovy5482ListsAndFlowTyping() {
-        assertScript '''
-            class StaticGroovy2 {
-                def bar() {
+        assertScript '''class C {}
+            def foo = [new Date(), 1, new C()]
+            foo.add(new Date())
+            foo.add(new C())
+            foo.add(2)
 
-                    def foo = [new Date(), 1, new C()]
-                    foo.add( 2 ) // Compiles
-                    foo.add( new Date() )
-                    foo.add( new C() )
-
-                    foo = [new Date(), 1]
-                    foo.add( 2 ) // Does not compile
-                }
-            }
-            class C {
-            }
-            new StaticGroovy2()
+            foo = [new Date(), 1]
+            foo.add(2) // STC err
         '''
     }
 
@@ -451,14 +407,14 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-5874 (pt.1)
+    // GROOVY-5874
     void testClosureSharedVariableInBinExp() {
         shouldFailWithMessages '''
             def sum = 0
             def cl1 = { sum = sum + 1 }
             def cl2 = { sum = new Date() }
         ''',
-        'A closure shared variable [sum] has been assigned with various types'
+        'The closure shared variable "sum" has been assigned with various types'
     }
 
     // GROOVY-5870
@@ -1154,9 +1110,9 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-9909 tests changed for GROOVY-8299
+    // GROOVY-8299, GROOVY-9909
     void testInvokeDefaultMethodFromDirectInterface() {
-        shouldFailWithMessages('''
+        shouldFailWithMessages '''
             class C implements groovy.transform.stc.Groovy9909 {
                 @Override String m() {
                     'it ' + super.m() // default method
@@ -1164,7 +1120,25 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             }
             String result = new C().m()
             assert result == 'it works'
-        ''',  "Default method m() requires qualified super")
+        ''',
+        'Default method m() requires qualified super'
+    }
+
+    // GROOVY-8299, GROOVY-11256
+    void testInvokeAbstractFromDirectInterface() {
+        shouldFailWithMessages '''
+            interface I {
+                def m()
+            }
+
+            class C implements I {
+                @Override m() {}
+                void test() {
+                    I.super.m()
+                }
+            }
+        ''',
+        'Abstract method m() cannot be called directly'
     }
 
     // GROOVY-8339, GROOVY-10109, GROOVY-10594

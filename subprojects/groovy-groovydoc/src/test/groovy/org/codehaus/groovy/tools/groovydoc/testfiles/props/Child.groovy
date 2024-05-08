@@ -16,23 +16,8 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-package groovy.bugs
+package org.codehaus.groovy.tools.groovydoc.testfiles.props
 
-import groovy.test.GroovyTestCase
-
-class Groovy9770 extends GroovyTestCase {
-    void testLambdaClassModifiers() {
-        assertScript '''
-            @groovy.transform.CompileStatic
-            class Foo {
-                def bar(String arg) {
-                    java.util.function.Function<String, String> up = (String s) -> { s.toUpperCase() }
-                    up(arg)
-                }
-            }
-
-            assert new Foo().bar('hello') == 'HELLO'
-            assert getClass().classLoader.loadClass('Foo$_bar_lambda1').modifiers == 17 // PUBLIC | FINAL
-        '''
-    }
+class Child extends Parent {
+    String fooC
 }

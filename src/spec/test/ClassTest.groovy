@@ -1,5 +1,3 @@
-import groovy.test.GroovyTestCase
-
 /*
  *  Licensed to the Apache Software Foundation (ASF) under one
  *  or more contributor license agreements.  See the NOTICE file
@@ -18,7 +16,10 @@ import groovy.test.GroovyTestCase
  *  specific language governing permissions and limitations
  *  under the License.
  */
-class ClassTest extends GroovyTestCase {
+
+import groovy.test.GroovyTestCase
+
+final class ClassTest extends GroovyTestCase {
 
     void testClassDefinition() {
         assertScript '''
@@ -222,31 +223,15 @@ class ClassTest extends GroovyTestCase {
             // end::interface_coercion[]
         '''
 
-        def err = shouldFail {
-            assertScript '''
-                // tag::protected_forbidden[]
-                interface Greeter {
-                    protected void greet(String name)           // <1>
-                }
-                // end::protected_forbidden[]
-                1
-            '''
-        }
-        assert err.contains("Method 'greet' is protected but should be public in interface 'Greeter'")
-
-        err = shouldFail {
-            assertScript '''
-                // tag::private_forbidden[]
-                interface Greeter {
-                    private void greet(String name)
-                }
-                // end::private_forbidden[]
-                1
-            '''
-        }
-        assert err.contains("Method 'greet' is private but should be public in interface 'Greeter'")
+        def err = shouldFail '''
+            // tag::protected_forbidden[]
+            interface Greeter {
+                protected void greet(String name)                       // <1>
+            }
+            // end::protected_forbidden[]
+        '''
+        assert err.contains("The method 'greet' must be public as it is declared abstract in interface 'Greeter'")
     }
-
 
     void testFields() {
         assertScript '''
@@ -395,7 +380,6 @@ class ClassTest extends GroovyTestCase {
         '''
     }
 
-
     void testDefineAnnotation() {
         assertScript '''
             // tag::define_annotation[]
@@ -515,8 +499,6 @@ class ClassTest extends GroovyTestCase {
             }
             // end::annotation_value_set_option[]
         '''
-
-
     }
 
     void testAnnotationTarget() {

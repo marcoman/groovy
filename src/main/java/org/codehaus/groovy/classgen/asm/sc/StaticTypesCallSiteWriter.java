@@ -150,6 +150,11 @@ public class StaticTypesCallSiteWriter extends CallSiteWriter {
 
     @Override
     public void makeCallSite(final Expression receiver, final String message, final Expression arguments, final boolean safe, final boolean implicitThis, final boolean callCurrent, final boolean callStatic) {
+        throw new GroovyBugError(
+                "at line " + receiver.getLineNumber() + " column " + receiver.getColumnNumber() + "\n" +
+                "On receiver: " + receiver.getText() + " with message: " + message + " and arguments: " + arguments.getText() + "\n" +
+                "StaticTypesCallSiteWriter#makeCallSite should not have been called. Call site lacked method target for static compilation.\n" +
+                "Please try to create a simple example reproducing this error and file a bug report at https://issues.apache.org/jira/browse/GROOVY");
     }
 
     @Override
@@ -566,11 +571,11 @@ public class StaticTypesCallSiteWriter extends CallSiteWriter {
         if (rType!=null && trySubscript(receiver, message, arguments, rType, aType, safe)) {
             return;
         }
-        // todo: more cases
+        // TODO: more cases
         throw new GroovyBugError(
-                "At line " + receiver.getLineNumber() + " column " + receiver.getColumnNumber() + "\n" +
+                "at line " + receiver.getLineNumber() + " column " + receiver.getColumnNumber() + "\n" +
                 "On receiver: " + receiver.getText() + " with message: " + message + " and arguments: " + arguments.getText() + "\n" +
-                "This method should not have been called. Please try to create a simple example reproducing\n" +
+                "This method should not have been called. Please try to create a simple example reproducing " +
                 "this error and file a bug report at https://issues.apache.org/jira/browse/GROOVY");
     }
 
@@ -585,7 +590,7 @@ public class StaticTypesCallSiteWriter extends CallSiteWriter {
                 return true;
             } else if ("remainder".equals(message) || "leftShift".equals(message)
                     || "rightShift".equals(message) || "rightShiftUnsigned".equals(message)
-                    || "and".equals(message) || "or".equals(message) || "xor".equals(message)) {
+                    || "and".equals(message) || "or".equals(message) || "xor".equals(message) || "implies".equals(message)) {
                 writeOperatorCall(receiver, arguments, message);
                 return true;
             }

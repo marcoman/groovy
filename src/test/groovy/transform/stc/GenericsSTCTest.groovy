@@ -677,7 +677,7 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
                 }
                 $type z = bar(foo(), 1)
             """,
-            'Cannot assign value of type'
+            'Cannot assign value of type (java.io.Serializable & java.lang.Comparable',') to variable of type java.lang.' + type
         }
     }
 
@@ -877,6 +877,34 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
             })
             def c2 = java.util.stream.Collectors.<Named,String,Named>toMap(named -> named.getName(), named -> named)
             //                                   ^^^^^^^^^^^^^^^^^^^^
+        '''
+    }
+
+    // GROOVY-11257
+    void testReturnTypeInferenceWithMethodGenerics31() {
+        assertScript '''
+            interface A<T> {
+                default Optional<T> getThing() {
+                    Optional.empty()
+                }
+            }
+            interface B<U> extends A<U> {
+            }
+            class C {
+                def <V> B<V> forge(V v) {
+                    return new B(){}
+                }
+                void test() {
+                    @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                        def type = node.getNodeMetaData(INFERRED_TYPE)
+                        assert type.toString(false) == 'java.util.Optional<java.math.BigInteger>'
+                    })
+                    def opt = forge(1G).thing
+                    def num = opt.orElse(42G).intValue()
+                }
+            }
+
+            new C().test()
         '''
     }
 
@@ -2471,67 +2499,65 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
             assertScript """
                 $mods void setX(List<String> strings) {
                 }
-                void test() {
-                    x = Collections.emptyList()
-                }
-                test()
+                x = Collections.emptyList()
             """
             assertScript """
                 $mods void setX(Collection<String> strings) {
                 }
-                void test() {
-                    x = Collections.emptyList()
-                }
-                test()
+                x = Collections.emptyList()
             """
             assertScript """
                 $mods void setX(Iterable<String> strings) {
                 }
-                void test() {
-                    x = Collections.emptyList()
-                }
-                test()
+                x = Collections.emptyList()
             """
 
             shouldFailWithMessages """
                 $mods void setX(List<String> strings) {
                 }
-                void test() {
-                    x = Collections.<Integer>emptyList()
-                }
+                x = Collections.<Integer>emptyList()
             """,
             'Incompatible generic argument types. Cannot assign java.util.List<java.lang.Integer> to: java.util.List<java.lang.String>'
         }
     }
 
-    // GROOVY-9734, GROOVY-9915
+    // GROOVY-9734, GROOVY-9915, GROOVY-11057
     void testShouldUseMethodGenericType4() {
         for (mods in ['', 'static']) {
             assertScript """
                 $mods void m(List<String> strings) {
                 }
-                void test() {
-                    m(Collections.emptyList())
-                }
-                test()
+                m(Collections.emptyList())
+                m([])
             """
             assertScript """
                 $mods void m(Collection<String> strings) {
                 }
-                void test() {
-                    m(Collections.emptyList())
-                }
-                test()
+                m(Collections.emptyList())
+                m([])
             """
             assertScript """
                 $mods void m(Iterable<String> strings) {
                 }
-                void test() {
-                    m(Collections.emptyList())
+                m(Collections.emptyList())
+                m([])
+            """
+            assertScript """
+                $mods void m(Map<String,Long> mapping) {
                 }
-                test()
+                m(Collections.emptyMap())
+                m([:])
             """
         }
+    }
+
+    // GROOVY-11276
+    void testShouldUseMethodGenericType4a() {
+        assertScript '''
+            def map = new HashMap<String,List<String>>()
+            map.put('foo', Collections.emptyList())
+            map.put('bar', [])
+        '''
     }
 
     // GROOVY-9751
@@ -4037,7 +4063,7 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-5893
-    void testPlusInClosure() {
+    void testPlusInClosure1() {
         for (type in ['def', 'var', 'Object', 'Number', 'Integer', 'Comparable']) {
             assertScript """
                 List<Integer> list = [1, 2, 3]
@@ -4050,9 +4076,21 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
                 list.each { int i -> sum += i }
                 assert sum == 6
 
-                $type sumWithInject = list.inject(0, { int x, int y -> x + y })
-                //    ^^^^^^^^^^^^^ T ^^^^ E[]    ^ U      ^ U    ^ E  ^^^^^ V
-                assert sumWithInject == 6
+                $type  sumViaInject = list.inject(0, { int x, int y -> x + y })
+                //     ^^^^^^^^^^^^ T ^^^^ E[]    ^ U      ^ T    ^ E  ^^^^^ V
+                assert sumViaInject == 6
+            """
+        }
+    }
+
+    // GROOVY-5893, GROOVY-7934
+    void testPlusInClosure2() {
+        for (type in ['def', 'var', 'Object', 'String', 'Serializable']) {
+            assertScript """
+                String[] array = ['1', '2', '3']
+                $type  joinViaInject = array.inject(0, { x,y -> (x + ',' + y) })
+                //                     integer or string ^ ^ string
+                assert joinViaInject == '0,1,2,3'
             """
         }
     }
@@ -4616,30 +4654,29 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-6504
-    void testInjectMethodWithInitialValueChoosesTheCollectionVersion() {
-        assertScript '''import org.codehaus.groovy.transform.stc.ExtensionMethodNode
+    void testInjectMethodWithInitialValueChoosesTheIterableVersion() {
+        assertScript '''
             @ASTTest(phase=INSTRUCTION_SELECTION, value={
                 def method = node.rightExpression.getNodeMetaData(DIRECT_METHOD_CALL_TARGET)
                 assert method.name == 'inject'
-                assert method instanceof ExtensionMethodNode
                 method = method.extensionMethodNode
-                assert method.parameters[0].type == make(Collection)
+                assert method.parameters[0].type == ITERABLE_TYPE
             })
             def result = ['a','bb','ccc'].inject(0) { int acc, String str -> acc += str.length(); acc }
-            assert  result == 6
+            assert result == 6
         '''
     }
 
     // GROOVY-6504
-    void testInjectMethodWithInitialValueChoosesTheCollectionVersionUsingDGM() {
+    void testInjectMethodWithInitialValueChoosesTheCollectionVersion() {
         assertScript '''import org.codehaus.groovy.runtime.DefaultGroovyMethods
             @ASTTest(phase=INSTRUCTION_SELECTION, value={
                 def method = node.rightExpression.getNodeMetaData(DIRECT_METHOD_CALL_TARGET)
                 assert method.name == 'inject'
-                assert method.parameters[0].type == make(Collection)
+                assert method.parameters[0].type == COLLECTION_TYPE
             })
-            def result = DefaultGroovyMethods.inject(['a','bb','ccc'],0, { int acc, String str -> acc += str.length(); acc })
-            assert  result == 6
+            def result = DefaultGroovyMethods.inject(['a','bb','ccc'], 0, { int acc, String str -> acc += str.length(); acc })
+            assert result == 6
         '''
     }
 
@@ -5387,6 +5424,46 @@ class GenericsSTCTest extends StaticTypeCheckingTestCase {
             assertThat(strings).as('assertion description')
                 .containsExactlyInAnyOrderElementsOf(['a','b'])
         '''
+    }
+
+    // GROOVY-10673, GROOVY-11057
+    void testMockito() {
+        assertScript '''
+            @Grab('org.mockito:mockito-core:4.11.0')
+            import static org.mockito.Mockito.*
+
+            class C {
+                String string
+            }
+            interface I {
+                C f(String s)
+            }
+
+            def i = mock(I)
+            when(i.f(anyString())).thenAnswer { /*InvocationOnMock*/ iom ->
+                new C(string: iom.arguments[0])
+                new C().tap {
+                    string = iom.arguments[0]
+                }
+            }
+            assert i.f('x') instanceof C
+        '''
+
+        for (map in ['Collections.emptyMap()', '[:]']) {
+            assertScript """
+                @Grab('org.mockito:mockito-core:4.11.0')
+                import static org.mockito.Mockito.*
+
+                interface Configuration {
+                    Map<String,Object> getSettings()
+                }
+
+                def configuration = mock(Configuration).tap {
+                    when(it.getSettings()).thenReturn($map)
+                }
+                assert configuration.settings.isEmpty()
+            """
+        }
     }
 
     //--------------------------------------------------------------------------

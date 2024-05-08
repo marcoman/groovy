@@ -848,6 +848,9 @@ expression
     // logical or (||)  (level 13)
     |   left=expression nls op=OR nls right=expression                                      #logicalOrExprAlt
 
+    // implication (==>)  (level 13.5)
+    |   <assoc=right> left=expression nls op=IMPLIES nls right=expression                   #implicationExprAlt
+
     // conditional test (level 14)
     |   <assoc=right> con=expression nls
         (   QUESTION nls tb=expression nls COLON nls
@@ -961,7 +964,7 @@ pathElement returns [int t]
             |
                 METHOD_POINTER nls      // Method pointer operator: foo.&y == foo.metaClass.getMethodPointer(foo, "y")
             |
-                METHOD_REFERENCE nls    // Method reference: System.out::println
+                METHOD_REFERENCE nls (nonWildcardTypeArguments)?  // Method reference: System.out::println
             )
             namePart
             { $t = 1; }

@@ -59,7 +59,7 @@ import static org.codehaus.groovy.ast.tools.GeneralUtils.varX;
 import static org.codehaus.groovy.ast.tools.GenericsUtils.extractPlaceholders;
 import static org.codehaus.groovy.ast.tools.ParameterUtils.isVargs;
 import static org.codehaus.groovy.ast.tools.ParameterUtils.parametersCompatible;
-import static org.codehaus.groovy.runtime.DefaultGroovyMethods.last;
+import static org.codehaus.groovy.runtime.ArrayGroovyMethods.last;
 import static org.codehaus.groovy.transform.stc.StaticTypeCheckingSupport.allParametersAndArgumentsMatch;
 import static org.codehaus.groovy.transform.stc.StaticTypeCheckingSupport.filterMethodsByVisibility;
 import static org.codehaus.groovy.transform.stc.StaticTypeCheckingSupport.findDGMMethodsForClassNode;
@@ -94,6 +94,9 @@ public class StaticTypesMethodReferenceExpressionWriter extends MethodReferenceE
         boolean targetIsArgument = false; // implied argument for expr::staticMethod?
         ClassNode typeOrTargetRefType = isClassExpression ? typeOrTargetRef.getType()
                 : controller.getTypeChooser().resolveType(typeOrTargetRef, classNode);
+
+        if (ClassHelper.isPrimitiveType(typeOrTargetRefType)) // GROOVY-11353
+            typeOrTargetRefType = ClassHelper.getWrapper(typeOrTargetRefType);
 
         ClassNode[] methodReferenceParamTypes = methodReferenceExpression.getNodeMetaData(StaticTypesMarker.CLOSURE_ARGUMENTS);
         Parameter[] parametersWithExactType = createParametersWithExactType(abstractMethod, methodReferenceParamTypes);
@@ -155,6 +158,7 @@ public class StaticTypesMethodReferenceExpressionWriter extends MethodReferenceE
                 isClassExpression = true;
             } else {
                 typeOrTargetRef.visit(controller.getAcg());
+                controller.getOperandStack().box(); // GROOVY-11353
             }
         }
 

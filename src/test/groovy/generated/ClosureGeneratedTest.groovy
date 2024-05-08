@@ -20,21 +20,21 @@ package groovy.generated
 
 import org.junit.Test
 
-class ClosureGeneratedTest extends AbstractGeneratedAstTestCase {
-    final Class<?> classUnderTest = parseClass('''class ClassUnderTest {
-           Closure<String> c(String arg) {
-               def closureVar = {
-                   arg
-               }
-               closureVar
-           }
-       }''')
+final class ClosureGeneratedTest extends AbstractGeneratedAstTestCase {
 
+    // GROOVY-11311
     @Test
-    void test_captured_argument_is_annotated() {
-        def objectUnderTest = classUnderTest.newInstance()
-        Closure<String> cls = classUnderTest.getMethod('c', String)
-            .invoke(objectUnderTest, 'var')
-        assertMethodIsAnnotated(cls.class, 'getArg')
+    void 'call method annotated'() {
+        def classUnderTest = parseClass '''
+            class C {
+                Closure m() {
+                    return { @Deprecated p -> }
+                }
+            }
+        '''
+        Object instance = classUnderTest.newInstance()
+        Closure closure = classUnderTest.getMethod('m').invoke(instance)
+
+        assertMethodIsAnnotated/*AsGenerated*/(closure.getClass(), 'call', Object)
     }
 }

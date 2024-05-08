@@ -41,18 +41,20 @@ import org.codehaus.groovy.ast.tools.GenericsUtils;
 import org.codehaus.groovy.classgen.AsmClassGenerator;
 import org.objectweb.asm.MethodVisitor;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.groovy.ast.tools.AnnotatedNodeUtils.markAsGenerated;
 import static org.apache.groovy.ast.tools.ClassNodeUtils.addGeneratedMethod;
+import static org.codehaus.groovy.ast.ClassHelper.long_TYPE;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.args;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.callThisX;
+import static org.codehaus.groovy.ast.tools.GeneralUtils.constX;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.ctorSuperX;
-import static org.codehaus.groovy.ast.tools.GeneralUtils.fieldX;
-import static org.codehaus.groovy.ast.tools.GeneralUtils.getGetterName;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.nullX;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.returnS;
 import static org.codehaus.groovy.ast.tools.GeneralUtils.stmt;
@@ -185,6 +187,10 @@ public class ClosureWriter {
         return false;
     }
 
+    private static boolean isNotObjectOrObjectArray(final ClassNode classNode) {
+        return !ClassHelper.isObjectType(classNode) && !ClassHelper.isObjectType(classNode.getComponentType());
+    }
+
     protected ClassNode createClosureClass(final ClosureExpression expression, final int modifiers) {
         ClassNode classNode = controller.getClassNode();
         ClassNode rootClass = controller.getOutermostClass();
@@ -220,22 +226,19 @@ public class ClosureWriter {
         answer.setSynthetic(true);
         answer.setUsingGenerics(rootClass.isUsingGenerics());
 
-        MethodNode method = answer.addMethod("doCall", ACC_PUBLIC, returnType, parameters, ClassNode.EMPTY_ARRAY, expression.getCode());
-        method.setSourcePosition(expression);
-
-        VariableScope varScope = expression.getVariableScope();
-        if (varScope == null) {
-            throw new RuntimeException(
-                    "Must have a VariableScope by now! for expression: " + expression + " class: " + name);
-        } else {
-            method.setVariableScope(varScope.copy());
+        {
+            MethodNode doCall = answer.addMethod("doCall", ACC_PUBLIC, returnType, parameters, ClassNode.EMPTY_ARRAY, expression.getCode());
+            doCall.setSourcePosition(expression);
+            VariableScope varScope = expression.getVariableScope();
+            if (varScope == null) {
+                throw new RuntimeException("Must have a VariableScope by now for expression: " + expression + " class: " + name);
+            } else {
+                doCall.setVariableScope(varScope.copy());
+            }
         }
-        if (parameters.length > 1
-                || (parameters.length == 1
-                    && parameters[0].getType() != null
-                    && !ClassHelper.OBJECT_TYPE.equals(parameters[0].getType())
-                    && !ClassHelper.OBJECT_TYPE.equals(parameters[0].getType().getComponentType()))) {
-            // let's add a typesafe call method
+
+        if (parameters.length > 1 || (parameters.length == 1 && (isNotObjectOrObjectArray(parameters[0].getType())
+                || !parameters[0].getAnnotations().isEmpty() || !parameters[0].getType().getTypeAnnotations().isEmpty()))) { // GROOVY-11311
             MethodNode call = new MethodNode(
                     "call",
                     ACC_PUBLIC,
@@ -244,20 +247,42 @@ public class ClosureWriter {
                     ClassNode.EMPTY_ARRAY,
                     returnS(callThisX("doCall", args(parameters))));
             addGeneratedMethod(answer, call, true);
-            call.setSourcePosition(expression);
         }
 
-        // let's make the constructor
         BlockStatement block = createBlockStatementForConstructor(expression, rootClass, classNode);
-
-        // let's assign all the parameter fields from the outer context
-        addFieldsAndGettersForLocalVariables(answer, localVariableParams);
-
         addConstructor(expression, localVariableParams, answer, block);
+
+        addFieldsForLocalVariables(answer, localVariableParams);
 
         correctAccessedVariable(answer, expression);
 
+        addSerialVersionUIDField(answer);
+
         return answer;
+    }
+
+    protected void addSerialVersionUIDField(final ClassNode classNode) {
+        // just to hash the full class name for better performance.
+        // The full spec for `serialVersionUID` is here:
+        //      https://docs.oracle.com/en/java/javase/21/docs/specs/serialization/class.html#stream-unique-identifiers
+        // As we could see, it's too complex for closures.
+        long serialVersionUID = hash(classNode.getName());
+        classNode.addFieldFirst("serialVersionUID", ACC_PRIVATE | ACC_STATIC | ACC_FINAL, long_TYPE, constX(serialVersionUID, true));
+    }
+
+    private static long hash(String str) {
+        final MessageDigest md;
+        try {
+            md = MessageDigest.getInstance("SHA");
+        } catch (NoSuchAlgorithmException e) {
+            throw new GroovyBugError("Failed to find SHA", e);
+        }
+        final byte[] hashBytes = md.digest(str.getBytes(StandardCharsets.UTF_8));
+        long hash = 0;
+        for (int i = Math.min(hashBytes.length, 7); i >= 0; i--) {
+            hash = (hash << 8) | (hashBytes[i] & 0xFF);
+        }
+        return hash;
     }
 
     protected ConstructorNode addConstructor(final ClosureExpression expression, final Parameter[] localVariableParams, final InnerClassNode answer, final BlockStatement block) {
@@ -272,10 +297,15 @@ public class ClosureWriter {
         return constructorNode;
     }
 
-    protected void addFieldsAndGettersForLocalVariables(final InnerClassNode closureClass, final Parameter[] localVariableParams) {
+    protected void addFieldsForLocalVariables(final InnerClassNode closureClass, final Parameter[] localVariableParams) {
         for (Parameter param : localVariableParams) {
             String     paramName = param.getName();
-            ClassNode  paramType = param.getType();
+            ClassNode  paramType = param.getOriginType();
+            if (ClassHelper.isPrimitiveType(paramType)) {
+                paramType = ClassHelper.getWrapper(paramType);
+            } else {
+                paramType = paramType.getPlainNodeReference();
+            }
 
             VariableExpression initialValue = varX(paramName);
             initialValue.setAccessedVariable(param);
@@ -283,18 +313,8 @@ public class ClosureWriter {
             param.setType(ClassHelper.makeReference());
 
             FieldNode paramField = closureClass.addField(paramName, ACC_PRIVATE | ACC_SYNTHETIC, param.getType(), initialValue);
-            paramField.setOriginType(ClassHelper.getWrapper(param.getOriginType()));
+            paramField.setOriginType(paramType);
             paramField.setHolder(true);
-
-            MethodNode getMethod = closureClass.addMethod(
-                getGetterName(paramName),
-                ACC_PUBLIC,
-                paramType.getPlainNodeReference(),
-                Parameter.EMPTY_ARRAY,
-                ClassNode.EMPTY_ARRAY,
-                returnS(fieldX(paramField))
-            );
-            markAsGenerated(closureClass, getMethod, true);
         }
     }
 

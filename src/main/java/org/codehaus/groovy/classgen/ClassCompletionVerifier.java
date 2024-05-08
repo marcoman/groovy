@@ -18,7 +18,6 @@
  */
 package org.codehaus.groovy.classgen;
 
-import groovy.transform.NonSealed;
 import groovy.transform.Sealed;
 import org.apache.groovy.ast.tools.AnnotatedNodeUtils;
 import org.apache.groovy.ast.tools.ClassNodeUtils;
@@ -124,7 +123,7 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
                 checkMethodsForWeakerAccess(node);
                 checkMethodsForOverridingFinal(node);
                 checkNoAbstractMethodsNonAbstractClass(node);
-                checkClassExtendsAllSelfTypes(node);
+                checkClassExtendsOrImplementsSelfTypes(node);
                 checkNoStaticMethodWithSameSignatureAsNonStatic(node);
                 checkGenericsUsage(node, node.getUnresolvedInterfaces());
                 checkGenericsUsage(node, node.getUnresolvedSuperClass());
@@ -142,7 +141,7 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
         if (parent != null) {
             result = parent.getDeclaredMethodsMap();
         } else {
-            result = new HashMap<String, MethodNode>();
+            result = new HashMap<>();
         }
         // add in unimplemented abstract methods from the interfaces
         ClassNodeUtils.addDeclaredMethodsFromInterfaces(node, result);
@@ -187,10 +186,14 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
     private void checkInterfaceMethodVisibility(final ClassNode node) {
         if (!node.isInterface()) return;
         for (MethodNode method : node.getMethods()) {
-            if (method.isPrivate()) {
-                addError("Method '" + method.getName() + "' is private but should be public in " + getDescription(currentClass) + ".", method);
-            } else if (method.isProtected()) {
-                addError("Method '" + method.getName() + "' is protected but should be public in " + getDescription(currentClass) + ".", method);
+            if (!method.isPublic()) {
+                if (method.isAbstract()) {
+                    addError("The method '" + method.getName() + "' must be public as it is declared abstract in " + getDescription(node) + ".", method);
+                } else if (!method.isPrivate() && !method.isStaticConstructor()) {
+                    // normal parsing blocks non-static protected or @PackageScope
+                    addError("The method '" + method.getName() + "' is " + (method.isProtected() ? "protected" : "package-private") +
+                            " but must be " + (method.isStatic() ? "public" : "default") + " or private in " + getDescription(node) + ".", method);
+                }
             }
         }
     }
@@ -200,8 +203,7 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
         if (!node.isAbstract() || node.isInterface()) return;
         for (MethodNode method : node.getAbstractMethods()) {
             if (method.isPrivate()) {
-                addError("Method '" + method.getName() + "' from " + getDescription(node) +
-                        " must not be private as it is declared as an abstract method.", method);
+                addError("The method '" + method.getName() + "' must not be private as it is declared abstract in " + getDescription(node) + ".", method);
             }
         }
     }
@@ -232,22 +234,16 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
         }
     }
 
-    private void checkClassExtendsAllSelfTypes(final ClassNode node) {
+    private void checkClassExtendsOrImplementsSelfTypes(final ClassNode node) {
         if (node.isInterface()) return;
         for (ClassNode anInterface : GeneralUtils.getInterfacesAndSuperInterfaces(node)) {
             if (Traits.isTrait(anInterface)) {
-                LinkedHashSet<ClassNode> selfTypes = new LinkedHashSet<ClassNode>();
-                for (ClassNode type : Traits.collectSelfTypes(anInterface, selfTypes, true, false)) {
-                    if (type.isInterface() && !node.implementsInterface(type)) {
-                        addError(getDescription(node)
-                            + " implements " + getDescription(anInterface)
-                            + " but does not implement self type " + getDescription(type),
-                            anInterface);
-                    } else if (!type.isInterface() && !node.isDerivedFrom(type)) {
-                        addError(getDescription(node)
-                            + " implements " + getDescription(anInterface)
-                            + " but does not extend self type " + getDescription(type),
-                            anInterface);
+                for (ClassNode selfType : Traits.collectSelfTypes(anInterface, new LinkedHashSet<>(), true, false)) {
+                    ClassNode superClass;
+                    if (selfType.isInterface() ? !node.implementsInterface(selfType) : !(node.isDerivedFrom(selfType)
+                            || ((superClass = node.getNodeMetaData("super.class")) != null && superClass.isDerivedFrom(selfType)))) {
+                        addError(getDescription(node) + " implements " + getDescription(anInterface) + " but does not " +
+                            (selfType.isInterface() ? "implement" : "extend") + " self type " + getDescription(selfType), anInterface);
                     }
                 }
             }
@@ -290,7 +286,8 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
     }
 
     private static String getDescription(final ClassNode node) {
-        return (node.isInterface() ? (Traits.isTrait(node) ? "trait" : "interface") : "class") + " '" + node.getName() + "'";
+        String kind = (node.isInterface() ? (Traits.isTrait(node) ? "trait" : "interface") : (node.isEnum() ? "enum" : "class"));
+        return kind + " '" + node.getName() + "'";
     }
 
     private static String getDescription(final MethodNode node) {
@@ -364,7 +361,7 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
     }
 
     private boolean nonSealed(final ClassNode node) {
-        return Boolean.TRUE.equals(node.getNodeMetaData(NonSealed.class));
+        return ClassNodeUtils.isNonSealed(node);
     }
 
     private void checkSealedParent(final ClassNode cn, final ClassNode parent) {
@@ -381,15 +378,17 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
     }
 
     private void checkImplementsAndExtends(final ClassNode node) {
-        ClassNode sn = node.getSuperClass();
-        if (sn != null && sn.isInterface() && !node.isInterface()) {
-            addError("You are not allowed to extend the " + getDescription(sn) + ", use implements instead.", node);
+        if (!node.isInterface()) {
+            ClassNode type = node.getUnresolvedSuperClass();
+            if (type != null && type.isInterface()) {
+                addError("You are not allowed to extend the " + getDescription(type) + ", use implements instead.", node);
+            }
         }
-        for (ClassNode anInterface : node.getInterfaces()) {
-            if (!anInterface.isInterface()) {
-                addError("You are not allowed to implement the " + getDescription(anInterface) + ", use extends instead.", node);
-            } else if (anInterface.isSealed()) {
-                checkSealedParent(node, anInterface);
+        for (ClassNode type : node.getInterfaces()) {
+            if (!type.isInterface()) {
+                addError("You are not allowed to implement the " + getDescription(type) + ", use extends instead.", node);
+            } else if (type.isSealed()) {
+                checkSealedParent(node, type);
             }
         }
     }
@@ -416,10 +415,6 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
             if (method.isFinal()) {
                 addError("The " + getDescription(method) + " from " + getDescription(cn) +
                         " must not be final. It is by definition abstract.", method);
-            }
-            if (method.isStatic() && !method.isStaticConstructor()) {
-                addError("The " + getDescription(method) + " from " + getDescription(cn) +
-                        " must not be static. Only fields may be static in an interface.", method);
             }
         }
     }
@@ -613,11 +608,8 @@ public class ClassCompletionVerifier extends ClassCodeVisitorSupport {
     }
 
     private void checkInterfaceFieldModifiers(final FieldNode node) {
-        if (!currentClass.isInterface()) return;
-        if ((node.getModifiers() & (ACC_PUBLIC | ACC_STATIC | ACC_FINAL)) == 0 ||
-                (node.getModifiers() & (ACC_PRIVATE | ACC_PROTECTED)) != 0) {
-            addError("The " + getDescription(node) + " is not 'public static final' but is defined in " +
-                    getDescription(currentClass) + ".", node);
+        if (currentClass.isInterface() && !(node.isPublic() && node.isStatic() && node.isFinal())) {
+            addError("The " + getDescription(node) + " is not 'public static final' but is defined in " + getDescription(currentClass) + ".", node);
         }
     }
 

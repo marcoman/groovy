@@ -16,25 +16,12 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-package groovy.transform.stc.vm6
+package org.codehaus.groovy.classgen.asm.sc
 
-import groovy.transform.stc.StaticTypeCheckingTestCase
+import groovy.transform.stc.TernaryOperatorSTCTest
 
 /**
- * Unit tests for static type checking : method calls.
+ * Unit tests for static compilation : ternary operator.
  */
-class MethodCallsSTCTest extends StaticTypeCheckingTestCase {
-    // GROOVY-5525
-    void testFindMethodFromArraysClass() {
-        assertScript '''import groovy.transform.TypeChecked
-        import java.util.Arrays
-
-        class ArrayCopying {
-            public static void main(String[] args) {
-                def acopy = Arrays.copyOf(args, 1)
-            }
-
-        }
-        '''
-    }
+final class TernaryOperatorStaticCompileTest extends TernaryOperatorSTCTest implements StaticCompilationTestSupport {
 }

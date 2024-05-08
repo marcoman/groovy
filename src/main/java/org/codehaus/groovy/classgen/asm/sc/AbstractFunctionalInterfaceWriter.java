@@ -27,7 +27,6 @@ import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import java.util.Arrays;
 import java.util.List;
 
 import static org.codehaus.groovy.ast.ClassHelper.getUnwrapper;
@@ -44,30 +43,17 @@ import static org.codehaus.groovy.classgen.asm.BytecodeHelper.getMethodDescripto
 public interface AbstractFunctionalInterfaceWriter {
 
     default String createMethodDescriptor(final MethodNode method) {
-        Class<?> returnType = method.getReturnType().getTypeClass();
-        Class<?>[] parameterTypes = Arrays.stream(method.getParameters())
-                .map(p -> p.getType().getTypeClass()).toArray(Class[]::new);
-
-        return getMethodDescriptor(returnType, parameterTypes);
+        return getMethodDescriptor(method.getReturnType(), method.getParameters());
     }
 
     default Handle createBootstrapMethod(final boolean isInterface, final boolean serializable) {
-        if (serializable) {
-            return new Handle(
-                    Opcodes.H_INVOKESTATIC,
-                    "java/lang/invoke/LambdaMetafactory",
-                    "altMetafactory",
-                    "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;",
-                    isInterface
-            );
-        }
-
         return new Handle(
                 Opcodes.H_INVOKESTATIC,
                 "java/lang/invoke/LambdaMetafactory",
-                "metafactory",
-                "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;",
-                isInterface
+                serializable ? "altMetafactory" : "metafactory",
+                serializable ? "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;"
+                             : "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;",
+                false // GROOVY-8299, GROOVY-8989, GROOVY-11265
         );
     }
 

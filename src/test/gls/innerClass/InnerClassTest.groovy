@@ -45,6 +45,29 @@ final class InnerClassTest {
         '''
     }
 
+    @Test // GROOVY-8254
+    void testAliasAIC() {
+        assertScript '''import Foo as Bar
+            class Foo {}
+
+            def regular = new Bar()
+            def anonymous = new Bar() {}
+            assert regular.class.name == 'Foo'
+            assert anonymous.class.superclass.name == 'Foo'
+        '''
+
+        assertScript '''import static Baz.Foo as Bar
+            class Baz {
+                static class Foo {}
+            }
+
+            def regular = new Bar()
+            def anonymous = new Bar() {}
+            assert regular.class.name == 'Baz$Foo'
+            assert anonymous.class.superclass.name == 'Baz$Foo'
+        '''
+    }
+
     @Test // GROOVY-10840
     void testArrayAIC() {
         assertScript '''
@@ -1083,6 +1106,26 @@ final class InnerClassTest {
         '''
     }
 
+    @Test // GROOVY-11352
+    void testUsageOfOuterMethod7() {
+        assertScript '''
+            class Super {
+              protected final String s
+              Super(String s) { this.s = s }
+            }
+            class Outer {
+              static String initValue() { 'ok' }
+              static class Inner extends Super {
+                Inner() {
+                  super(initValue()) // here
+                }
+              }
+              String test() { new Inner().s }
+            }
+            assert new Outer().test() == 'ok'
+        '''
+    }
+
     @Test
     void testUsageOfOuterMethodOverridden() {
         assertScript '''
@@ -1457,7 +1500,7 @@ final class InnerClassTest {
             new File(parentDir, 'p').mkdir()
             new File(parentDir, 'q').mkdir()
 
-            def a = new File(parentDir, 'p/A.Java')
+            def a = new File(parentDir, 'p/A.java')
             a.write '''
                 package p;
                 public abstract class A {
@@ -1498,7 +1541,7 @@ final class InnerClassTest {
             new File(parentDir, 'p').mkdir()
             new File(parentDir, 'q').mkdir()
 
-            def a = new File(parentDir, 'p/A.Java')
+            def a = new File(parentDir, 'p/A.java')
             a.write '''
                 package p;
                 public abstract class A {

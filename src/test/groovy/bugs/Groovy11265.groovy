@@ -18,36 +18,29 @@
  */
 package groovy.bugs
 
-import gls.CompilableTestSupport
+import org.junit.Test
 
-class Groovy8127Bug extends CompilableTestSupport {
-    void testTraitWithClosureReferencingField() {
-        assertScript """
-        trait BarTrait {
-            String result = ''
-            public final Runnable bar = { result = 'changeme' } as Runnable
-            void doRun() { bar.run() }
-        }
+import static groovy.test.GroovyAssert.assertScript
 
-        class Bar implements BarTrait {}
+final class Groovy11265 {
+    @Test
+    void testDefaultMethodWithLambdaReturn() {
+        assertScript '''import java.util.function.Function
+            interface I {
+                int f(int x)
+                @groovy.transform.CompileStatic
+                default Function<Integer,Integer> times(int multiplicand) {
+                    return (multiplier) -> { multiplier * multiplicand }
+                }
+            }
+            class C implements I {
+                @Override
+                int f(int x) {
+                    times(2).apply(x)
+                }
+            }
 
-        def b = new Bar()
-        b.doRun()
-        assert b.result == 'changeme'
-        """
-    }
-
-    void testTraitWithCompileStaticAndCoercedClosure() {
-        shouldCompile """
-        @groovy.transform.CompileStatic
-        trait FooTrait {
-            public final Runnable foo = { println new Date() } as Runnable
-            void doRun() { foo.run() }
-        }
-
-        class Foo implements FooTrait { }
-
-        new Foo().doRun()
-        """
+            assert new C().f(8) == 16
+        '''
     }
 }
