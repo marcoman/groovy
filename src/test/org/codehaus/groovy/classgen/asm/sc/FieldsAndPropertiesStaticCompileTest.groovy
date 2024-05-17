@@ -239,7 +239,7 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
                 assert new D().m() == 0
             """
             def d = astTrees['D'][1]
-            assert  d.contains('GETFIELD C.x')
+            assert d.contains('GETFIELD C.x')
         }
     }
 
@@ -859,7 +859,7 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
         '''
     }
 
-    // GROOVY-5001, GROOVY-5491, GROOVY-11367, GROOVY-11369
+    // GROOVY-5001, GROOVY-5491, GROOVY-11367, GROOVY-11369, GROOVY-11370
     void testMapPropertyAccess() {
         assertScript '''
             Map<String,Number> map = [:]
@@ -880,9 +880,14 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
             def c = map.metaClass
 
             @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == MAP_TYPE
+            })
+            def d = map.properties
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
                 assert node.getNodeMetaData(INFERRED_TYPE) == Number_TYPE
             })
-            def d = map.something
+            def e = map.some_thing
         '''
     }
 
@@ -903,10 +908,16 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
 
         assertScript '''
             def map = [:]
-            map.metaClass = null // TODO: GROOVY-6549 made this "put" (SC only)!
+            map.metaClass = null
             assert map.metaClass != null
-            assert map.containsKey('metaClass')
+            assert !map.containsKey('metaClass')
         '''
+
+        shouldFailWithMessages '''
+            def map = [:]
+            map.properties = null
+        ''',
+        'Cannot set read-only property: properties'
     }
 
     // GROOVY-11367, GROOVY-11368
@@ -935,7 +946,7 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
         '''
     }
 
-    // GROOVY-11223
+    // GROOVY-11223, GROOVY-11373
     @Override
     void testMapPropertyAccess10() {
         assertScript """
@@ -949,13 +960,12 @@ final class FieldsAndPropertiesStaticCompileTest extends FieldsAndPropertiesSTCT
             def map = new ${MapType.name}()
             map.bar = 22 // protected setter
         """,
-        "Method setBar is protected in ${MapType.name}"
-        /*
+        "Cannot access method: setBar(java.lang.Object) of class: ${MapType.name}"
+
         shouldFailWithMessages """
             def map = new ${MapType.name}()
             map.baz = 33 // package-private setter
         """,
-        "Method setBaz is package-private in ${MapType.name}"
-        */
+        "Cannot access method: setBaz(java.lang.Object) of class: ${MapType.name}"
     }
 }

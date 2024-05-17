@@ -478,7 +478,7 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-5232
-    void testSetterForProperty() {
+    void testSetterForProperty1() {
         assertScript '''
             class Person {
                 String name
@@ -490,6 +490,16 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
                 }
             }
             Person.create()
+        '''
+    }
+
+    // GROOVY-11372
+    void testSetterForProperty2() {
+        assertScript '''
+            def baos = new ByteArrayOutputStream()
+            assert baos.size() == 0
+            baos.bytes= new byte[1]
+            assert baos.size() == 1
         '''
     }
 
@@ -682,25 +692,31 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-11369
+    // GROOVY-11369, GROOVY-11372
     void testMapPropertyAccess5() {
         assertScript '''
             def map = [:]
-            assert map.entry     == null
-            assert map.empty     == null
-            assert map.class     == null
-            assert map.metaClass == null // TODO
+            assert map.entry      == null
+            assert map.empty      == null
+            assert map.class      == null
+            assert map.metaClass  == null // TODO
+            assert map.properties != null
 
-            map.entry     = null
-            map.empty     = null // not read-only property
-            map.class     = null // not read-only property
-            map.metaClass = null // not read-only property
+            map.entry      = null
+            map.empty      = null // not read-only property
+            map.class      = null // not read-only property
+            map.metaClass  = null // not read-only property
 
             assert  map.containsKey('entry')
             assert  map.containsKey('empty')
             assert  map.containsKey('class')
             assert !map.containsKey('metaClass')
         '''
+        shouldFailWithMessages '''
+            def map = [:]
+            map.properties = null
+        ''',
+        'Cannot set read-only property: properties'
     }
 
     // GROOVY-8074
@@ -1621,7 +1637,6 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             class BooleanSetterOnly {
                 void setFlag(boolean b) {}
             }
-
             def b = new BooleanSetterOnly()
             b.flag = 'foo'
         '''
@@ -1629,7 +1644,6 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             class StringSetterOnly {
                 void setFlag(String b) {}
             }
-
             def b = new StringSetterOnly()
             b.flag = false
         '''
@@ -1637,7 +1651,6 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             class ClassSetterOnly {
                 void setFlag(Class b) {}
             }
-
             def b = new ClassSetterOnly()
             b.flag = 'java.lang.String'
         '''
