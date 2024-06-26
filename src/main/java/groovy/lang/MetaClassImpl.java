@@ -18,36 +18,6 @@
  */
 package groovy.lang;
 
-import java.beans.BeanInfo;
-import java.beans.EventSetDescriptor;
-import java.beans.Introspector;
-import java.beans.MethodDescriptor;
-import java.beans.PropertyDescriptor;
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.net.URL;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.function.BiConsumer;
 import org.apache.groovy.internal.util.UncheckedThrow;
 import org.apache.groovy.util.BeanUtils;
 import org.apache.groovy.util.SystemUtil;
@@ -111,6 +81,37 @@ import org.codehaus.groovy.util.SingleKeyHashMap;
 import org.codehaus.groovy.vmplugin.VMPlugin;
 import org.codehaus.groovy.vmplugin.VMPluginFactory;
 import org.objectweb.asm.Opcodes;
+
+import java.beans.BeanInfo;
+import java.beans.EventSetDescriptor;
+import java.beans.Introspector;
+import java.beans.MethodDescriptor;
+import java.beans.PropertyDescriptor;
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.net.URL;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
 
 import static groovy.lang.Tuple.tuple;
 import static java.lang.Character.isUpperCase;
@@ -1118,12 +1119,13 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
                     break;
 
                 case Closure.DELEGATE_ONLY:
-                    if (method == null && delegate != closure && delegate != null) {
+                    if (method == null && delegate != null && delegate != closure) {
                         MetaClass delegateMetaClass = lookupObjectMetaClass(delegate);
                         method = delegateMetaClass.pickMethod(methodName, argClasses);
                         if (method != null) {
                             return delegateMetaClass.invokeMethod(delegate, methodName, originalArguments);
-                        } else if (delegate != closure && (delegate instanceof GroovyObject)) {
+                        }
+                        if (delegate instanceof GroovyObject) {
                             return invokeMethodOnGroovyObject(methodName, originalArguments, delegate);
                         }
                     }
@@ -1856,6 +1858,13 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
         }
 
         //----------------------------------------------------------------------
+        // java.util.Map get method before non-public getter -- see GROOVY-11367
+        //----------------------------------------------------------------------
+        if (isMap && !isStatic && !method.isPublic()) {
+            return ((Map<?,?>) object).get(name);
+        }
+
+        //----------------------------------------------------------------------
         // propertyMissing (via category) or generic get method
         //----------------------------------------------------------------------
         Object[] arguments = EMPTY_ARGUMENTS;
@@ -1947,9 +1956,9 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
                 return mp;
             }
 
-            //----------------------------------------------------------------------
+            //------------------------------------------------------------------
             // java.util.Map get method
-            //----------------------------------------------------------------------
+            //------------------------------------------------------------------
             if (isMap && !isStatic) {
                 return new MetaProperty(name, Object.class) {
                     @Override
@@ -1970,6 +1979,23 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
             if (mp != null) {
                 return mp;
             }
+        }
+
+        //----------------------------------------------------------------------
+        // java.util.Map get method before non-public getter -- see GROOVY-11367
+        //----------------------------------------------------------------------
+        if (isMap && !isStatic && !method.isPublic()) {
+            return new MetaProperty(name, Object.class) {
+                @Override
+                public Object getProperty(Object object) {
+                    return ((Map<?,?>) object).get(name);
+                }
+
+                @Override
+                public void setProperty(Object object, Object newValue) {
+                    throw new UnsupportedOperationException();
+                }
+            };
         }
 
         if (method != null) {
@@ -2080,10 +2106,10 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
     }
 
     /**
-     * Object#getClass, Map#isEmpty, GroovyObject#getMetaClass
+     * Object#getClass and Map#isEmpty
      */
     private boolean isSpecialProperty(final String name) {
-        return "class".equals(name) || (isMap && ("empty".equals(name) || "metaClass".equals(name)));
+        return "class".equals(name) || (isMap && ("empty".equals(name)));
     }
 
     private Tuple2<MetaMethod, MetaProperty> createMetaMethodAndMetaProperty(final Class sender, final String name, final boolean useSuper, final boolean isStatic) {
@@ -2723,11 +2749,8 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
         boolean ambiguousListener = false;
         if (method == null) {
             method = listeners.get(name);
-            ambiguousListener = method == AMBIGUOUS_LISTENER_METHOD;
-            if (method != null &&
-                    !ambiguousListener &&
-                    newValue instanceof Closure) {
-                // let's create a dynamic proxy
+            ambiguousListener = (method == AMBIGUOUS_LISTENER_METHOD);
+            if (method != null && !ambiguousListener && newValue instanceof Closure) {
                 Object proxy = Proxy.newProxyInstance(
                         theClass.getClassLoader(),
                         new Class[]{method.getParameterTypes()[0].getTheClass()},
@@ -2742,18 +2765,14 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
         //----------------------------------------------------------------------
         // field
         //----------------------------------------------------------------------
-        if (method == null && field != null) {
-            boolean mapInstance = (isMap && !isStatic);
-            if (field.isFinal()) {
-                if (mapInstance) { // GROOVY-8065
-                    ((Map) object).put(name, newValue);
-                    return;
-                }
-                throw new ReadOnlyPropertyException(name, theClass); // GROOVY-5985
-            }
-            if (!mapInstance || field.isPublic() || field.isProtected()) {
+        if (method == null && field != null
+                && (!isMap || isStatic // GROOVY-8065
+                    || field.isPublic())) { // GROOVY-11367
+            if (!field.isFinal()) {
                 field.setProperty(object, newValue);
                 return;
+            } else {
+                throw new ReadOnlyPropertyException(name, theClass); // GROOVY-5985
             }
         }
 
@@ -2768,6 +2787,15 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
         if (method == null && genericSetMethod != null && (genericSetMethod.isStatic() || !isStatic)) {
             arguments = new Object[]{name, newValue};
             method = genericSetMethod;
+        }
+
+        //----------------------------------------------------------------------
+        // java.util.Map put method before non-public method -- see GROOVY-11367
+        //----------------------------------------------------------------------
+        if (isMap && !isStatic && !(method != null && method.isPublic())
+                  && (mp == null || !mp.isPublic() || isSpecialProperty(name))) {
+            ((Map) object).put(name, newValue);
+            return;
         }
 
         //----------------------------------------------------------------------
@@ -2787,14 +2815,6 @@ public class MetaClassImpl implements MetaClass, MutableMetaClass {
             }
 
             VM_PLUGIN.transformMetaMethod(this, method).doMethodInvoke(object, arguments);
-            return;
-        }
-
-        //------------------------------------------------------------------
-        // java.util.Map put method
-        //------------------------------------------------------------------
-        if (isMap && !isStatic) {
-            ((Map) object).put(name, newValue);
             return;
         }
 

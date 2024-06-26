@@ -329,9 +329,8 @@ public class StructuredSyntaxDocumentFilter extends DocumentFilter {
             if (!regexp.toString().isEmpty()) {
                 matcher = Pattern.compile(regexp.substring(1)).matcher("");
 
-                Iterator<LexerNode> iter = children.values().iterator();
-                while (iter.hasNext()) {
-                    (iter.next()).initialize();
+                for (LexerNode lexerNode : children.values()) {
+                    lexerNode.initialize();
                 }
             }
             initialized = true;
@@ -454,7 +453,7 @@ public class StructuredSyntaxDocumentFilter extends DocumentFilter {
          * @param regexps
          * @param style
          */
-        public void putStyle(String regexps[], Style style) {
+        public void putStyle(String[] regexps, Style style) {
             putStyle(buildRegexp(regexps), style);
         }
 
@@ -476,7 +475,7 @@ public class StructuredSyntaxDocumentFilter extends DocumentFilter {
         /**
          * @param regexps
          */
-        public void removeStyle(String regexps[]) {
+        public void removeStyle(String[] regexps) {
             removeStyle(buildRegexp(regexps));
         }
 

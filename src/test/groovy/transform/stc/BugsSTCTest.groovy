@@ -38,7 +38,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2 / it } }
         ''',
-        'Cannot find matching method int#div(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#div(java.lang.Object)'
     }
     void testShouldNotAllowModOnUntypedVariable() {
         shouldFailWithMessages '''
@@ -52,7 +52,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2.mod(it) } }
         ''',
-        'Cannot find matching method int#mod(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#mod(java.lang.Object)'
     }
     void testShouldNotAllowRemainderOnUntypedVariable() {
         shouldFailWithMessages '''
@@ -66,7 +66,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2 % it } }
         ''',
-        'Cannot find matching method int#remainder(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#remainder(java.lang.Object)'
     }
     void testShouldNotAllowMulOnUntypedVariable() {
         shouldFailWithMessages '''
@@ -80,7 +80,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2 * it } }
         ''',
-        'Cannot find matching method int#multiply(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#multiply(java.lang.Object)'
     }
     void testShouldNotAllowPlusOnUntypedVariable() {
         shouldFailWithMessages '''
@@ -94,7 +94,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2 + it } }
         ''',
-        'Cannot find matching method int#plus(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#plus(java.lang.Object)'
     }
     void testShouldNotAllowMinusOnUntypedVariable() {
         shouldFailWithMessages '''
@@ -108,7 +108,7 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
             def foo(Closure cls) {}
             def bar() { foo { 2 - it } }
         ''',
-        'Cannot find matching method int#minus(java.lang.Object)'
+        'Cannot find matching method java.lang.Integer#minus(java.lang.Object)'
     }
 
     // GROOVY-7929
@@ -243,90 +243,6 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    void testClosureThisObjectDelegateOwnerProperty() {
-        assertScript '''
-            class C {
-                void m() {
-                    C that = this;
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = thisObject
-                        assert ref == that
-                    }();
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = delegate
-                        assert ref == that
-                    }();
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = owner
-                        assert ref == that
-                    }();
-                }
-            }
-            new C().m()
-        '''
-    }
-
-    void testClosureThisObjectDelegateOwnerAccessor() {
-        assertScript '''
-            class C {
-                void m() {
-                    C that = this;
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = getThisObject()
-                        assert ref == that
-                    }();
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = getDelegate()
-                        assert ref == that
-                    }();
-
-                    { ->
-                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
-                            assert node.getNodeMetaData(INFERRED_TYPE)?.name == 'C'
-                        })
-                        def ref = getOwner()
-                        assert ref == that
-                    }();
-                }
-            }
-            new C().m()
-        '''
-    }
-
-    // GROOVY-9604
-    void testClosureResolveStrategy() {
-        assertScript '''
-            class C {
-                def m() {
-                    return { ->
-                        resolveStrategy + getResolveStrategy()
-                    }();
-                }
-            }
-            assert new C().m() == 0
-        '''
-    }
-
     // GROOVY-5616
     void testAssignToGroovyObject() {
         assertScript '''
@@ -405,16 +321,6 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
 
             execute()
         '''
-    }
-
-    // GROOVY-5874
-    void testClosureSharedVariableInBinExp() {
-        shouldFailWithMessages '''
-            def sum = 0
-            def cl1 = { sum = sum + 1 }
-            def cl2 = { sum = new Date() }
-        ''',
-        'The closure shared variable "sum" has been assigned with various types'
     }
 
     // GROOVY-5870
@@ -1233,13 +1139,21 @@ class BugsSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
+    // GROOVY-11427
+    void testClassSubscript() {
+        shouldFailWithMessages '''
+            Class<String> c = String.class
+            def x = c[0]
+        ''',
+        'Cannot find matching method java.lang.Class#getAt(int) or static method java.lang.String#getAt(int)'
+    }
+
     // GROOVY-9999
     void testMathSqrt() {
         assertScript '''
             def test() {
                Math.sqrt(Math.PI*2)
             }
-
             double result = (double) test() // 2.5066282746310002
             assert result > 2.5066
         '''

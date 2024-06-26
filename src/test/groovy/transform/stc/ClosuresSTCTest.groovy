@@ -18,8 +18,6 @@
  */
 package groovy.transform.stc
 
-import groovy.test.NotYetImplemented
-
 /**
  * Unit tests for static type checking : closures.
  */
@@ -39,7 +37,7 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    @NotYetImplemented
+    // GROOVY-11394
     void testCallClosure3() {
         shouldFailWithMessages '''
             def c = { -> }
@@ -150,7 +148,36 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    //
+    // GROOVY-11394
+    void testCallClosure16() {
+        assertScript '''
+            def c = { Object[] arr, opt = null -> Arrays.toString(arr) + opt }
+            def x = c()
+            assert x == '[]null'
+            def y = c(1)
+            assert y == '[1]null'
+            def z = c(null)
+            assert z == 'nullnull'
+        '''
+    }
+
+    // GROOVY-11400
+    void testCallClosure17() {
+        assertScript '''
+            def c = { p -> p }
+            assert c('foo') == 'foo'
+            c = { p, q -> '' + p + q }
+            assert c('foo', 'bar') == 'foobar'
+            def cc; cc = c
+            assert cc('foo', 'bar') == 'foobar'
+        '''
+        shouldFailWithMessages '''
+            def c = { p -> p }
+            c = { p, q -> '' + p + q }
+            c('foo')
+        ''',
+        'Cannot call closure that accepts [java.lang.Object, java.lang.Object] with [java.lang.String]'
+    }
 
     void testClosureReturnTypeInference1() {
         assertScript '''
@@ -311,14 +338,14 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-5145
-    void testCollect() {
+    void testCollect1() {
         assertScript '''
             List<String> strings = [1,2,3].collect { it.toString() }
         '''
     }
 
     // GROOVY-5145
-    void testCollectWithSubclass() {
+    void testCollect2() {
         assertScript '''
             class StringClosure extends Closure<String> {
                 StringClosure() { super(null,null) }
@@ -328,33 +355,91 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-7701
-    void testWithDelegateVsOwnerField() {
+    void testWithIntReturnType() {
+        assertScript '''
+            class Test {
+               static int a(String s) {
+                    s.toCharArray().with {
+                        length
+                    }
+                }
+            }
+            assert Test.a( 'Daniel' ) == 6
+        '''
+    }
+
+    void testWithLongReturnType() {
+        assertScript '''
+            class Test {
+               static long a() {
+                    Long.with {
+                        MAX_VALUE
+                    }
+                }
+            }
+            assert Test.a() == Long.MAX_VALUE
+        '''
+    }
+
+    void testWithStringReturnType() {
+        assertScript '''
+            class Test {
+              static String a( String s ) {
+                s.with { String it -> it.toLowerCase() }
+              }
+            }
+            assert Test.a( 'TIM' ) == 'tim'
+        '''
+    }
+
+    // GROOVY-5907
+    void testWithGenericReturnType() {
+        assertScript '''
+            class Test {
+              static List<String> a( String s ) {
+                s.with { String it -> [ "$it".toString() ] }
+              }
+            }
+            assert Test.a( 'tim' ) == [ 'tim' ]
+        '''
+    }
+
+    void testWithNestedMemberAccess() {
         assertScript '''
             class Foo {
-                List type
+                String foo = 'foo'
+                String foom() { 'foom' }
             }
-
             class Bar {
-                int type = 10
-
-                @Lazy
-                List<Foo> something = { ->
-                    List<Foo> tmp = []
-                    def foo = new Foo()
-                    foo.with {
-                        type = ['String']
-                    //  ^^^^ should be Foo.type, not Bar.type
-                    }
-                    tmp.add(foo)
-                    tmp
-                }()
+                String bar = 'bar'
+                String barm() { 'barm' }
             }
-
-            def bar = new Bar()
-            assert bar.type == 10
-            assert bar.something*.type == [['String']]
-            assert bar.type == 10
+            class Baz {
+                String baz = 'baz'
+                String bazm() { 'bazm' }
+            }
+            String other() { 'other' }
+            new Foo().with {
+                assert foo == 'foo'
+                assert foom() == 'foom'
+                assert other() == 'other'
+                new Bar().with {
+                    assert foo == 'foo'
+                    assert bar == 'bar'
+                    assert foom() == 'foom'
+                    assert barm() == 'barm'
+                    assert other() == 'other'
+                    new Baz().with {
+                        assert foo == 'foo'
+                        assert bar == 'bar'
+                        assert baz == 'baz'
+                        assert foom() == 'foom'
+                        assert barm() == 'barm'
+                        assert bazm() == 'bazm'
+                        assert other() == 'other'
+                    }
+                }
+            }
         '''
     }
 
@@ -375,8 +460,18 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         'Cannot find matching method (java.io.Serializable & ','#charAt(int)'
     }
 
-    // GROOVY-9516
+    // GROOVY-5874
     void testClosureSharedVariable3() {
+        shouldFailWithMessages '''
+            def sum = 0
+            def cl1 = { sum = sum + 1 }
+            def cl2 = { sum = new Date() }
+        ''',
+        'The closure shared variable "sum" has been assigned with various types'
+    }
+
+    // GROOVY-9516
+    void testClosureSharedVariable4() {
         shouldFailWithMessages '''
             class A {}
             class B extends A { def m() {} }
@@ -393,7 +488,7 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-10356
-    void testClosureSharedVariable4() {
+    void testClosureSharedVariable5() {
         assertScript '''
             interface A {
                 void m()
@@ -407,7 +502,7 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-10052
-    void testClosureSharedVariable5() {
+    void testClosureSharedVariable6() {
         assertScript '''
             String x
             def f = { ->
@@ -419,7 +514,7 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
     }
 
     // GROOVY-10052
-    void testClosureSharedVariable6() {
+    void testClosureSharedVariable7() {
         assertScript '''
             def x
             def f = { ->
@@ -701,6 +796,20 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         }
     }
 
+    // GROOVY-11397
+    void testSAMsInMethodSelection7() {
+        assertScript '''
+            interface Action<T> { void run(T t) }
+            interface Proc { void doSomething() }
+            void trigger(Action<Proc> action) {
+                action.run({->})
+            }
+            trigger { Proc it ->
+                it.doSomething()
+            }
+        '''
+    }
+
     // GROOVY-6238
     void testDirectMethodCallOnClosureExpression() {
         assertScript '''
@@ -784,6 +893,36 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
         }
     }
 
+    // GROOVY-7701
+    void testOwnerVersusDelegate() {
+        assertScript '''
+            class Foo {
+                List type
+            }
+
+            class Bar {
+                int type = 10
+
+                @Lazy
+                List<Foo> something = { ->
+                    List<Foo> tmp = []
+                    def foo = new Foo()
+                    foo.with {
+                        type = ['String']
+                    //  ^^^^ should be Foo.type, not Bar.type
+                    }
+                    tmp.add(foo)
+                    tmp
+                }()
+            }
+
+            def bar = new Bar()
+            assert bar.type == 10
+            assert bar.something*.type == [['String']]
+            assert bar.type == 10
+        '''
+    }
+
     // GROOVY-9089
     void testOwnerVersusDelegateFromNestedClosure() {
         String declarations = '''
@@ -802,7 +941,6 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
                 new B().with(block)
             }
         '''
-
         assertScript declarations + '''
             outer {
                 inner {
@@ -812,7 +950,6 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
                 }
             }
         '''
-
         assertScript declarations + '''
             outer {
                 inner {
@@ -832,6 +969,152 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
                 optimizationOptions['indy'] = true
                 optimizationOptions.indy = true
             }
+        '''
+    }
+
+    // GROOVY-11393
+    void testClassClosureDelegateProperty() {
+        String foo = '''
+            class Foo {
+                static getBar() { 'bar' }
+                Object getBaz() { 'baz' }
+            }
+        '''
+        assertScript foo + '''
+            Foo.with {
+                assert name == 'Foo'
+                assert getName() == 'Foo'
+            }
+        '''
+        assertScript foo + '''
+            Foo.with {
+                assert bar == 'bar'
+                assert getBar() == 'bar'
+            }
+        '''
+        shouldFailWithMessages foo + '''
+            Foo.with {
+                print baz
+                print getBaz()
+            }
+        ''',
+        'The variable [baz] is undeclared', // TODO: instance method error
+        'Non-static method Foo#getBaz cannot be called from static context'
+    }
+
+    // GROOVY-5470, GROOVY-6091, GROOVY-9604, GROOVY-11399
+    void testClosureThisObjectDelegateOwnerAccessor() {
+        for (meth in ['getThisObject()', 'getDelegate()', 'getOwner()']) {
+            assertScript """
+                class C {
+                    void m() {
+                        C that = this;
+                        { ->
+                            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                                def type = node.getNodeMetaData(INFERRED_TYPE)?.toString(false)
+                                assert type/*of $meth*/ == 'C'
+                            })
+                            Object ref = $meth
+                            assert ref == that
+                        }()
+                    }
+                }
+                new C().m()
+            """
+            assertScript """
+                class C {
+                    static m() {
+                        { ->
+                            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                                def type = node.getNodeMetaData(INFERRED_TYPE)?.toString(false)
+                                assert type/*of $meth*/ == 'java.lang.Class<C>'
+                            })
+                            Object ref = $meth
+                            assert ref == C
+                        }()
+                    }
+                }
+                C.m()
+            """
+        }
+        for (meth in ['getDelegate()', 'getOwner()']) {
+            assertScript """
+                def that
+                that = { ->
+                    { ->
+                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                            def type = node.getNodeMetaData(INFERRED_TYPE)
+                            assert type/*of $meth*/ == CLOSURE_TYPE
+                        })
+                        Object ref = $meth
+                        assert ref == that
+                    }()
+                }
+                that.call()
+            """
+        }
+        assertScript '''
+            void test(Closure c) {
+                { ->
+                    @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                        def type = node.getNodeMetaData(INFERRED_TYPE)
+                        assert type == OBJECT_TYPE
+                    })
+                    def x = c.getThisObject()
+                }()
+            }
+            test({->})
+        '''
+    }
+
+    // GROOVY-5470, GROOVY-6091, GROOVY-9604, GROOVY-11399
+    void testClosureThisObjectDelegateOwnerProperty() {
+        for (prop in ['thisObject', 'delegate', 'owner']) {
+            assertScript """
+                class C {
+                    void m() {
+                        C that = this;
+                        { ->
+                            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                                def type = node.getNodeMetaData(INFERRED_TYPE)?.toString(false)
+                                assert type/*of $prop*/ == 'C'
+                            })
+                            Object ref = $prop
+                            assert ref == that
+                        }()
+                    }
+                }
+                new C().m()
+            """
+            assertScript """
+                class C {
+                    static m() {
+                        { ->
+                            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                                def type = node.getNodeMetaData(INFERRED_TYPE)?.toString(false)
+                                assert type/*of $prop*/ == 'java.lang.Class<C>'
+                            })
+                            Object ref = $prop
+                            assert ref == C
+                        }()
+                    }
+                }
+                C.m()
+            """
+        }
+        assertScript '''
+            def that
+            that = { ->
+                { ->
+                    @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                        def type = node.getNodeMetaData(INFERRED_TYPE)
+                        assert type == CLOSURE_TYPE
+                    })
+                    Object ref = owner
+                    assert ref == that
+                }()
+            }
+            that.call()
         '''
     }
 
@@ -910,6 +1193,41 @@ class ClosuresSTCTest extends StaticTypeCheckingTestCase {
 
             String result = test()
             assert result == 'foo'
+        '''
+    }
+
+    // GROOVY-11386
+    void testClosurePropertyPrecedence() {
+        assertScript '''
+            String x = { -> metaClass }()
+            assert x.contains('$_run_closure')
+            String y = { -> getMetaClass() }()
+            assert y.contains('$_run_closure')
+            String z = { -> owner.metaClass }()
+            assert !z.contains('$_run_closure')
+        '''
+        assertScript '''
+            static foo() {
+                String x = { -> metaClass }()
+                assert x.contains('$_foo_closure')
+                String y = { -> getMetaClass() }()
+                assert y.contains('$_foo_closure')
+            }
+            foo()
+        '''
+    }
+
+    // GROOVY-9604
+    void testClosureResolveStrategy() {
+        assertScript '''
+            class C {
+                def m() {
+                    return { ->
+                        resolveStrategy + getResolveStrategy()
+                    }();
+                }
+            }
+            assert new C().m() == 0
         '''
     }
 }

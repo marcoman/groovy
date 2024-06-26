@@ -16,23 +16,14 @@
  *  specific language governing permissions and limitations
  *  under the License.
  */
-plugins {
-    id 'org.apache.groovy-library'
+
+def m(Map paramMap) {
+    def name = paramMap.name
+    def hello = paramMap.hello
+    assert 'Hello, Daniel' == hello(name)
+    def hi = paramMap.hi
+    if (hi) assert 'Hi, Daniel' == hi(name)
 }
 
-dependencies {
-    api rootProject // TestNgRunner implements GroovyRunner...
-    runtimeOnly('org.testng:testng:7.10.2') {
-        exclude(group: 'com.google.inject', module: 'guice')
-        exclude(group: 'com.google.code.findbugs', module: 'jsr305')
-        exclude(group: 'junit', module: 'junit')
-        exclude(group: 'org.apache.ant', module: 'ant')
-        exclude(group: 'org.yaml', module: 'snakeyaml')
-    }
-    runtimeOnly "org.slf4j:slf4j-api:$versions.slf4j"
-    testImplementation projects.groovyTest
-}
-
-groovyLibrary {
-    optionalModule()
-}
+m(hello: n -> 'Hello, ' + n, name: 'Daniel')
+m(hello: n -> 'Hello, ' + n, hi: n -> 'Hi, ' + n, name: 'Daniel')

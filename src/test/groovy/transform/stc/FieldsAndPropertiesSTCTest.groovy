@@ -19,12 +19,20 @@
 package groovy.transform.stc
 
 import groovy.transform.PackageScope
+import org.codehaus.groovy.control.customizers.ImportCustomizer
 import org.codehaus.groovy.tools.javac.JavaAwareCompilationUnit
 
 /**
  * Unit tests for static type checking : fields and properties.
  */
 class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
+
+    @Override
+    protected void configure() {
+        config.addCompilationCustomizers(
+            new ImportCustomizer().addImports('groovy.transform.PackageScope')
+        )
+    }
 
     void testAssignFieldValue() {
         assertScript '''
@@ -163,7 +171,7 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
              c.@x = '1'
          ''',
          'Cannot assign value of type java.lang.String to variable of type int'
-     }
+    }
 
     void testInferenceFromAttributeType() {
         assertScript '''
@@ -393,7 +401,7 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    void testGetterForProperty1() {
+    void testGetterForProperty() {
         assertScript '''
             class C {
                 String p
@@ -403,103 +411,18 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-10981
-    void testGetterForProperty2() {
-        for (mode in ['', 'public', 'private', 'protected', '@groovy.transform.PackageScope']) {
-            assertScript """
-                abstract class A {
-                    $mode Object p = 'field'
-                    CharSequence getP() { 'property' }
-                }
-                class C extends A {
-                    def m() {
-                        final int len = p.length()
-                        if (p instanceof String) {
-                            p.toLowerCase()
-                            p.toUpperCase()
-                        }
-                    }
-                }
-                String which = new C().m()
-                assert which == 'PROPERTY'
-            """
-        }
-    }
-
-    // GROOVY-9973
-    void testGetterForProperty3() {
-        assertScript '''
-            class C {
-                private int f
-                int getP() { f }
-                Integer m() { 123456 - p }
-                Integer m(int i) { i - p }
-            }
-            def c = new C()
-            assert c.m() == 123456 // BUG! exception in phase 'class generation' ...
-            assert c.m(123) == 123 // ClassCastException: class org.codehaus.groovy.ast.Parameter cannot be cast to ...
-        '''
-    }
-
-    // GROOVY-11005
-    void testGetterForProperty4() {
-        File parentDir = File.createTempDir()
-        config.with {
-            targetDirectory = File.createTempDir()
-            jointCompilationOptions = [memStub: true]
-        }
-        try {
-            def a = new File(parentDir, 'Pogo.groovy')
-            a.write '''
-                class Pogo {
-                    String value
-                    String getValue() { value }
-                }
-            '''
-            def b = new File(parentDir, 'Test.groovy')
-            b.write '''
-                class Test extends Pogo {
-                    void test() {
-                        value = 'string'
-                    }
-                }
-            '''
-
-            def loader = new GroovyClassLoader(this.class.classLoader)
-            def cu = new JavaAwareCompilationUnit(config, loader)
-            cu.addSources(a, b)
-            cu.compile()
-
-            loader.loadClass('Test').newInstance().test()
-        } finally {
-            parentDir.deleteDir()
-            config.targetDirectory.deleteDir()
-        }
-    }
-
     // GROOVY-5232
-    void testSetterForProperty1() {
+    void testSetterForProperty() {
         assertScript '''
             class Person {
                 String name
                 static Person create() {
                     def p = new Person()
                     p.setName("Guillaume")
-                    // but p.name = "Guillaume" works
                     return p
                 }
             }
             Person.create()
-        '''
-    }
-
-    // GROOVY-11372
-    void testSetterForProperty2() {
-        assertScript '''
-            def baos = new ByteArrayOutputStream()
-            assert baos.size() == 0
-            baos.bytes= new byte[1]
-            assert baos.size() == 1
         '''
     }
 
@@ -530,6 +453,7 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             class C {
                 Closure<List> bar = { Date date -> date.getTime() }
             }
+            new C()
         ''',
         'Cannot return value of type long for closure expecting java.util.List'
 
@@ -537,6 +461,7 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             class C {
                 java.util.function.Supplier<String> bar = { -> 123 }
             }
+            new C()
         ''',
         'Cannot return value of type int for closure expecting java.lang.String'
     }
@@ -585,19 +510,31 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    void testSetterUsingPropertyNotation() {
+    // GROOVY-10380
+    void testGetterUsingPropertyNotation() {
         assertScript '''
             class C {
-                boolean ok = false
-                void setFoo(String foo) { ok = (foo == 'foo') }
+                def getFoo(foo = 'foo') { foo }
             }
             def c = new C()
-            c.foo = 'foo'
-            assert c.ok
+            def v = c.foo
+            assert v == 'foo'
         '''
     }
 
-    void testSetterUsingPropertyNotationOnInterface() {
+    void testSetterUsingPropertyNotation() {
+        assertScript '''
+            class C {
+                boolean set
+                void setFoo(foo) { set = (foo == 'foo') }
+            }
+            def c = new C()
+            c.foo = 'foo'
+            assert c.set
+        '''
+    }
+
+    void testSetterUsingPropertyNotation2() {
         assertScript '''
             interface FooAware { void setFoo(String arg) }
             class C implements FooAware {
@@ -608,6 +545,16 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             }
             def c = new C()
             test(c)
+        '''
+    }
+
+    // GROOVY-11372
+    void testSetterUsingPropertyNotation3() {
+        assertScript '''
+            def baos = new ByteArrayOutputStream()
+            assert baos.size() == 0
+            baos.bytes= new byte[1]
+            assert baos.size() == 1
         '''
     }
 
@@ -640,6 +587,16 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             })
             def x = list.x
             assert x == [1,2]
+        '''
+        assertScript '''
+            void test(List list) {
+                @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                    def type = node.getNodeMetaData(INFERRED_TYPE)
+                    assert type.toString(false) == 'java.lang.Class<? extends java.lang.Object>'
+                })
+                def c = list.class
+            }
+            test([])
         '''
     }
 
@@ -692,14 +649,14 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-11369, GROOVY-11372
+    // GROOVY-11367, GROOVY-11369, GROOVY-11372, GROOVY-11384
     void testMapPropertyAccess5() {
         assertScript '''
             def map = [:]
             assert map.entry      == null
             assert map.empty      == null
             assert map.class      == null
-            assert map.metaClass  == null // TODO
+            assert map.metaClass  != null
             assert map.properties != null
 
             map.entry      = null
@@ -717,6 +674,46 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             map.properties = null
         ''',
         'Cannot set read-only property: properties'
+
+        assertScript '''
+            Map<String,Number> map = [:]
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == Number_TYPE
+            })
+            def e = map.entry
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == Number_TYPE
+            })
+            def a = map.empty
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == Number_TYPE
+            })
+            def b = map.class
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == METACLASS_TYPE
+            })
+            def c = map.metaClass
+
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == MAP_TYPE
+            })
+            def d = map.properties
+        '''
+        assertScript '''
+            void test(Map map) {
+                def str = ''
+                str += map.empty
+                str += map.with{ empty }
+                str += map.with{ delegate.empty }
+                str += map.with{ {->owner.empty}() }
+                assert str == 'entryentryentryentry'
+            }
+            test( [:].withDefault{ 'entry' } )
+        '''
     }
 
     // GROOVY-8074
@@ -813,52 +810,451 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-11368
+    // GROOVY-11367
     void testMapPropertyAccess9() {
+        for (mode in ['','static']) {
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode v = 'field'
+                    public        $mode w = 'field'
+                    protected     $mode x = 'field'
+                    @PackageScope $mode y = 'field'
+                    private       $mode z = 'field'
+                }
+                def map = new M()
+                assert map.m === map.@m
+                assert map.v == 'field'
+                assert map.w == 'field'
+                assert map.x == 'entry'
+                assert map.y == 'entry'
+                assert map.z == 'entry'
+                map.with {
+                    assert v == 'field'
+                    assert w == 'field'
+                    assert x == 'entry'
+                    assert y == 'entry'
+                    assert z == 'entry'
+                }
+            """
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode getV() { 'getter' }
+                    public        $mode getW() { 'getter' }
+                    protected     $mode getX() { 'getter' }
+                    @PackageScope $mode getY() { 'getter' }
+                    private       $mode getZ() { 'getter' }
+                }
+                def map = new M()
+                assert map.v == 'getter'
+                assert map.w == 'getter'
+                assert map.x == 'entry'
+                assert map.y == 'entry'
+                assert map.z == 'entry'
+                map.with {
+                    assert v == 'getter'
+                    assert w == 'getter'
+                    assert x == 'entry'
+                    assert y == 'entry'
+                    assert z == 'entry'
+                }
+            """
+        }
+    }
+
+    // GROOVY-11403
+    void testMapPropertyAccess10() {
+        for (mode in ['','static']) {
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode v = 'field'
+                    public        $mode w = 'field'
+                    protected     $mode x = 'field'
+                    @PackageScope $mode y = 'field'
+                    private       $mode z = 'field'
+                    void test() {
+                        assert m    === this.@m
+                        assert v     == 'field'
+                        assert w     == 'field'
+                        assert x     == 'field'
+                        assert y     == 'field'
+                        assert z     == 'field';
+                        {->
+                            assert v == 'field'
+                            assert w == 'field'
+                            assert x == 'entry'
+                            assert y == 'entry'
+                            assert z == 'entry'
+                        }()
+                    }
+                }
+                new M().test()
+            """
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode getV() { 'getter' }
+                    public        $mode getW() { 'getter' }
+                    protected     $mode getX() { 'getter' }
+                    @PackageScope $mode getY() { 'getter' }
+                    private       $mode getZ() { 'getter' }
+                    void test() {
+                        assert v     == 'getter'
+                        assert w     == 'getter'
+                        assert x     == 'entry'
+                        assert y     == 'entry'
+                        assert z     == 'entry';
+                        {->
+                            assert v == 'getter'
+                            assert w == 'getter'
+                            assert x == 'entry'
+                            assert y == 'entry'
+                            assert z == 'entry'
+                        }()
+                    }
+                }
+                new M().test()
+            """
+        }
+    }
+
+    // GROOVY-11402, GROOVY-11403
+    void testMapPropertyAccess11() {
+        for (mode in ['','static']) {
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode v = 'field'
+                    public        $mode w = 'field'
+                    protected     $mode x = 'field'
+                    @PackageScope $mode y = 'field'
+                    private       $mode z = 'field'
+                    void test() {
+                        assert this.m    === this.@m
+                        assert this.v     == 'field'
+                        assert this.w     == 'field'
+                        assert this.x     == 'field'
+                        assert this.y     == 'field'
+                        assert this.z     == 'field';
+                        {->
+                            assert this.v == 'field'
+                            assert this.w == 'field'
+                            assert this.x == 'entry'
+                            assert this.y == 'entry'
+                            assert this.z == 'entry'
+                        }()
+                    }
+                }
+                new M().test()
+            """
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode getV() { 'getter' }
+                    public        $mode getW() { 'getter' }
+                    protected     $mode getX() { 'getter' }
+                    @PackageScope $mode getY() { 'getter' }
+                    private       $mode getZ() { 'getter' }
+                    void test() {
+                        assert this.v     == 'getter'
+                        assert this.w     == 'getter'
+                        assert this.x     == 'entry'
+                        assert this.y     == 'entry'
+                        assert this.z     == 'entry';
+                        {->
+                            assert this.v == 'getter'
+                            assert this.w == 'getter'
+                            assert this.x == 'entry'
+                            assert this.y == 'entry'
+                            assert this.z == 'entry'
+                        }()
+                    }
+                }
+                new M().test()
+            """
+        }
+    }
+
+    // GROOVY-11403
+    void testMapPropertyAccess12() {
+        for (mode in ['','static']) {
+            assertScript """
+                class M {
+                    @Delegate final Map m = [:].withDefault{ 'entry' }
+                    def           $mode v = 'field'
+                    public        $mode w = 'field'
+                    protected     $mode x = 'field'
+                    @PackageScope $mode y = 'field'
+                    private       $mode z = 'field'
+                    void test1() {
+                        assert this.m    === this.@m
+                        assert this.v     == 'field'
+                        assert this.w     == 'field'
+                        assert this.x     == 'field'
+                        assert this.y     == 'field'
+                        assert this.z     == 'field';
+                        {->
+                            assert this.v == 'field'
+                            assert this.w == 'field'
+                            assert this.x == 'entry'
+                            assert this.y == 'entry'
+                            assert this.z == 'entry'
+                        }()
+                    }
+                }
+                class MM extends M {
+                    void test2() {
+                        assert this.v     == 'field'
+                        assert this.w     == 'field'
+                        assert this.x     == 'entry'
+                        assert this.y     == 'entry'
+                        assert this.z     == 'entry';
+                        {->
+                            assert this.v == 'field'
+                            assert this.w == 'field'
+                            assert this.x == 'entry'
+                            assert this.y == 'entry'
+                            assert this.z == 'entry'
+                        }()
+                    }
+                }
+                new MM().with { test1(); test2() }
+            """
+        }
+    }
+
+    // GROOVY-11403
+    void testMapPropertyAccess13() {
+        for (mode in ['','static']) {
+            assertScript """
+                class M {
+                    @Delegate private final Map<String,String> m = [:]
+                    def           $mode v
+                    public        $mode w
+                    protected     $mode x
+                    @PackageScope $mode y
+                    private       $mode z
+                    void test1() {
+                        this.v     = 'value'
+                        this.w     = 'value'
+                        this.x     = 'value'
+                        this.y     = 'value'
+                        this.z     = 'value'
+                    }
+                    void test2() {
+                        {->
+                            this.v = 'value'
+                            this.w = 'value'
+                            this.x = 'value'
+                            this.y = 'value'
+                            this.z = 'value'
+                        }()
+                    }
+                }
+                def map = new M()
+                map.test1()
+                assert map.isEmpty()
+                map.test2()
+                assert map.keySet().toSorted() == ['x','y','z']
+
+                class MM extends M {
+                    void test3() {
+                        this.v     = 'value'
+                        this.w     = 'value'
+                        this.x     = 'value'
+                        this.y     = 'value'
+                        this.z     = 'value'
+                    }
+                    void test4() {
+                        {->
+                            this.v = 'value'
+                            this.w = 'value'
+                            this.x = 'value'
+                            this.y = 'value'
+                            this.z = 'value'
+                        }()
+                    }
+                }
+                def sub = new MM()
+                sub.test1()
+                assert sub.isEmpty()
+                sub.test2()
+                assert sub.keySet().toSorted() == ['x','y','z']
+                sub.clear()
+                sub.test3()
+                assert sub.keySet().toSorted() == ['x','y','z']
+                sub.clear()
+                sub.test4()
+                assert sub.keySet().toSorted() == ['x','y','z']
+            """
+            // unlike fields, only public setter before map put
+            assertScript """
+                class M {
+                    @Delegate private final Map<String,String> m = [:]
+                    def           $mode void setV(value) { print 'v' }
+                    public        $mode void setW(value) { print 'w' }
+                    protected     $mode void setX(value) { print 'x' }
+                    @PackageScope $mode void setY(value) { print 'y' }
+                    private       $mode void setZ(value) { print 'z' }
+                    void test1() {
+                        this.v     = 'value'
+                        this.w     = 'value'
+                        this.x     = 'value'
+                        this.y     = 'value'
+                        this.z     = 'value'
+                    }
+                    void test2() {
+                        {->
+                            this.v = 'value'
+                            this.w = 'value'
+                            this.x = 'value'
+                            this.y = 'value'
+                            this.z = 'value'
+                        }()
+                    }
+                }
+                def map = new M()
+                map.test1()
+                assert map.keySet().toSorted() == ['x','y','z']
+                map.clear()
+                map.test2()
+                assert map.keySet().toSorted() == ['x','y','z']
+
+                class MM extends M {
+                    void test3() {
+                        this.v     = 'value'
+                        this.w     = 'value'
+                        this.x     = 'value'
+                        this.y     = 'value'
+                        this.z     = 'value'
+                    }
+                    void test4() {
+                        {->
+                            this.v = 'value'
+                            this.w = 'value'
+                            this.x = 'value'
+                            this.y = 'value'
+                            this.z = 'value'
+                        }()
+                    }
+                }
+                def sub = new MM()
+                sub.test1()
+                assert sub.keySet().toSorted() == ['x','y','z']
+                sub.clear()
+                sub.test2()
+                assert sub.keySet().toSorted() == ['x','y','z']
+                sub.clear()
+                sub.test3()
+                assert sub.keySet().toSorted() == ['x','y','z']
+                sub.clear()
+                sub.test4()
+                assert sub.keySet().toSorted() == ['x','y','z']
+            """
+        }
+    }
+
+    // GROOVY-11368
+    void testMapPropertyAccess14() {
         String type = '''
-            class C implements Map<String,String> {
+            class M implements Map<String,String> {
                 @Delegate Map<String,String> impl = [:]
             }
         '''
         assertScript type + '''
-            def map = new C()
+            def map = new M()
             assert map.entry == null
             assert map.empty == null
             assert map.class == null
-            assert map.metaClass == null
+            assert map.metaClass != null
         '''
         assertScript type + '''
-            def test(C map) { // no diff
+            def test(M map) { // no diff
                 assert map.entry == null
                 assert map.empty == null
                 assert map.class == null
-                assert map.metaClass == null
+                assert map.metaClass != null
             }
-            test(new C())
+            test(new M())
         '''
     }
 
-    // GROOVY-11223
-    void testMapPropertyAccess10() {
-        assertScript """
-            def map = new ${MapType.name}()
+    // GROOVY-11367
+    void testMapPropertyAccess15() {
+        String map = "def map = new ${MapType.name}()"
+        assertScript map + '''
             map.foo = 11 // public setter
             assert map.foo == 11
             assert map.getFoo() == 11
             assert map.get('foo') == null
-        """
-        assertScript """
-            def map = new ${MapType.name}()
-            map.bar = 22 // protected setter
-            assert map.bar == null
+        '''
+        assertScript map + '''
+            map.bar = 22 // (not) protected setter
+            assert map.bar == 22
             assert map.@bar == 2
-        """
-        assertScript """
-            def map = new ${MapType.name}()
-            map.baz = 33 // package-private setter
-            assert map.baz == null
+        '''
+        assertScript map + '''
+            map.baz = 33 // (not) package-private setter
+            assert map.baz == 33
             assert map.@baz == 3
-        """
+        '''
+    }
+
+    // GROOVY-11387
+    void testMapPropertyAccess16() {
+        assertScript '''
+            def map = new HashMap<String,String>()
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == STRING_TYPE
+            })
+            def xxx = map.table
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == STRING_TYPE
+            })
+            def yyy = map.with{
+                @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                    assert node.getNodeMetaData(INFERRED_TYPE) == STRING_TYPE
+                })
+                def zzz = table
+            }
+            assert xxx == null
+            assert yyy == null
+        '''
+    }
+
+    // GROOVY-11387
+    void testMapPropertyAccess17() {
+        assertScript '''
+            class HttpHeaders extends HashMap<String,List<String>> {
+                protected static final String ACCEPT = 'Accept'
+            }
+            @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                assert node.getNodeMetaData(INFERRED_TYPE) == STRING_TYPE
+            })
+            def accept = HttpHeaders.ACCEPT
+            assert accept == 'Accept'
+        '''
+    }
+
+    // GROOVY-11401
+    void testMapPropertyAccess18() {
+        assertScript '''
+            class C {
+                private Object obj = 'field'
+                def m() {
+                    Map<String,String> map = [:].withDefault{'entry'}
+                    map.with {
+                        @ASTTest(phase=INSTRUCTION_SELECTION, value={
+                            assert node.getNodeMetaData(INFERRED_TYPE) == STRING_TYPE
+                        })
+                        def xxx = obj
+                    }
+                }
+            }
+            assert new C().m() == 'entry'
+        '''
     }
 
     void testTypeCheckerDoesNotThinkPropertyIsReadOnly() {
@@ -992,6 +1388,8 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
                 }
                 def p = 1
             }
+            def i = new Outer.Inner()
+            def x = i.m()
         ''',
         'The variable [p] is undeclared.'
     }
@@ -1006,6 +1404,8 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
                 }
                 def p = 1
             }
+            def i = new Outer.Inner()
+            def x = i.m()
         ''',
         'No such property: p for class: Outer$Inner'
     }
@@ -1084,9 +1484,6 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
                     static class Inner {
                         $propertySource
                         def test(int i) {
-                            if (i > VALUE) {
-                                // ...
-                            }
                             return VALUE
                         }
                     }
@@ -1163,13 +1560,71 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
+    // GROOVY-10981
+    void testSuperPropertyAccess4() {
+        for (mode in ['', 'public', 'private', 'protected', '@PackageScope']) {
+            assertScript """
+                abstract class A {
+                    $mode Object p = 'field'
+                    CharSequence getP() { 'property' }
+                }
+                class C extends A {
+                    def m() {
+                        final int len = p.length()
+                        if (p instanceof String) {
+                            p.toLowerCase()
+                            p.toUpperCase()
+                        }
+                    }
+                }
+                String which = new C().m()
+                assert which == 'PROPERTY'
+            """
+        }
+    }
+
+    // GROOVY-11005
+    void testSuperPropertyAccess5() {
+        File parentDir = File.createTempDir()
+        config.with {
+            targetDirectory = File.createTempDir()
+            jointCompilationOptions = [memStub: true]
+        }
+        try {
+            def a = new File(parentDir, 'Pogo.groovy')
+            a.write '''
+                class Pogo {
+                    String value
+                    String getValue() { value }
+                }
+            '''
+            def b = new File(parentDir, 'Test.groovy')
+            b.write '''
+                class Test extends Pogo {
+                    void test() {
+                        value = 'string'
+                    }
+                }
+            '''
+
+            def loader = new GroovyClassLoader(this.class.classLoader)
+            def cu = new JavaAwareCompilationUnit(config, loader)
+            cu.addSources(a, b)
+            cu.compile()
+
+            loader.loadClass('Test').newInstance().test()
+        } finally {
+            parentDir.deleteDir()
+            config.targetDirectory.deleteDir()
+        }
+    }
+
     void testPrivateFieldAccessInClosure1() {
         assertScript '''
             class C {
                 private int x
                 void test() {
-                    def func = { -> x = 666 }
-                    func()
+                    {-> x = 666 }()
                     assert x == 666
                 }
             }
@@ -1177,24 +1632,101 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
         '''
     }
 
-    // GROOVY-9683
     void testPrivateFieldAccessInClosure2() {
+        assertScript '''
+            class C {
+                private static int x
+                static test() {
+                    {-> x = 666 }()
+                    assert x == 666
+                }
+            }
+            C.test()
+        '''
+    }
+
+    // GROOVY-9683
+    void testPrivateFieldAccessInClosure3() {
         assertScript '''
             class C {
                 private static X = 'xxx'
                 void test() {
-                    [:].withDefault { throw new MissingPropertyException(it.toString()) }.with {
+                    {->
                         assert X == 'xxx'
-                    }
+                    }()
                 }
             }
             new C().test()
         '''
     }
 
+    // GROOVY-9695
+    void testPrivateFieldAccessInClosure4() {
+        assertScript '''
+            class C {
+                private static final X = 'xxx'
+                void test() {
+                    Map m = [:];
+                    {->
+                        assert X == 'xxx'
+                        m[X] = 123
+                    }()
+                    assert m == [xxx:123]
+                }
+            }
+            new C().test()
+
+            class D extends C {
+            }
+            new D().test()
+        '''
+    }
+
+    // GROOVY-9768
+    void testPrivateFieldAccessInClosure5() {
+        assertScript '''import groovy.transform.stc.FirstParam
+            class C {
+                private <T> void foo(
+                        @DelegatesTo.Target T target,
+                        @DelegatesTo(strategy=Closure.OWNER_FIRST)
+                        @ClosureParams(FirstParam.class) Closure action) {
+                    action.setResolveStrategy(Closure.OWNER_FIRST)
+                    action.setDelegate(target)
+                    action.call(target)
+                }
+                void test() {
+                    def map = [V: 'val']
+                    foo(map) {
+                        assert V == 'val'
+                        assert X == 'xxx'
+                        assert it.X == null
+                    }
+                }
+                private static final X = 'xxx'
+            }
+            new C().test()
+        '''
+    }
+
+    // GROOVY-11144
+    void testPrivateFieldAccessInClosure6() {
+        assertScript '''
+            abstract class A {
+                private static final String NAME = 'name'
+                final String name
+                A() {
+                    name = { -> NAME }()
+                }
+            }
+            class C extends A {
+            }
+            assert new C().name == 'name'
+        '''
+    }
+
     // GROOVY-11198
     void testPrivateFieldAccessInEnumInit() {
-        for (mode in ['public', 'private', 'protected', '@groovy.transform.PackageScope']) {
+        for (mode in ['public', 'private', 'protected', '@PackageScope']) {
             assertScript """
                 class C {
                     $mode static int ONE = 1
@@ -1263,6 +1795,64 @@ class FieldsAndPropertiesSTCTest extends StaticTypeCheckingTestCase {
             String result = new D().who
             assert result == 'D'
         '''
+    }
+
+    // GROOVY-9973
+    void testPrivateFieldVersusPublicGetter() {
+        assertScript '''
+            class C {
+                private int f
+                int getP() { f }
+                Integer m() { 123456 - p }
+                Integer m(int i) { i - p }
+            }
+            def c = new C()
+            assert c.m() == 123456 // BUG! exception in phase 'class generation' ...
+            assert c.m(123) == 123 // ClassCastException: class org.codehaus.groovy.ast.Parameter cannot be cast to ...
+        '''
+    }
+
+    // GROOVY-11381
+    void testPrivateFieldVersusPublicGetterOnInterface() {
+        assertScript '''
+            interface I {
+                default int getP() { 42 }
+            }
+            class C implements I {
+                private String p
+            }
+            def c = new C()
+            assert c.p == 42
+            Number c_p = c.p // Cannot assign value of type String to variable of type Number
+        '''
+    }
+
+    void testPrivateFieldVersusPublicSetterOnInterface() {
+        assertScript '''
+            interface I {
+                Object[] set = new Object[1]
+                default void setP(int p) { set[0] = true }
+            }
+            class C implements I {
+                private String p
+            }
+            class D extends C {
+            }
+            def d = new D()
+            d.p = 42
+            assert I.set[0]
+        '''
+        shouldFailWithMessages '''
+            interface I {
+                default void setP(int p) { }
+            }
+            class C implements I {
+                private String p
+            }
+            def c = new C()
+            c.p = 'xxx'
+        ''',
+        'Cannot assign value of type java.lang.String to variable of type int'
     }
 
     void testProtectedAccessorFromSamePackage() {

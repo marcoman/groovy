@@ -30,7 +30,7 @@ class ConcurrentObjectHolder<T> {
     private volatile T object;
     private final Supplier<T> supplier;
 
-    public ConcurrentObjectHolder(Supplier<T> supplier) {
+    ConcurrentObjectHolder(Supplier<T> supplier) {
         this.supplier = supplier;
     }
 
