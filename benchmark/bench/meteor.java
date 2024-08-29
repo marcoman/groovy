@@ -98,7 +98,9 @@ public class meteor
           // ... print result
 
           if (solutions.size() > N)
-         System.out.println("ERROR");
+         {
+             System.out.println("ERROR");
+         }
          else if (solutions.size() < N)
          System.out.println("TIMEOUT");
          else
@@ -172,9 +174,13 @@ public class meteor
              // ... find shapes that fit
 
              if ((piece = pieces[ix]) == null)
-            continue;
+            {
+                continue;
+            }
             else
-            list  = pieces[ix].shapes(row,col);
+            {
+                list  = pieces[ix].shapes(row,col);
+            }
 
              for (Shape shape: list)
              { // ... fits badly ?
@@ -195,7 +201,9 @@ public class meteor
                while (irow < 10)
                  { while (icol < 5)
                      { if ((clone & MASK[irow][icol]) == 0)
-                      break next;
+                      {
+                          break next;
+                      }
 
                        icol++;
                      }
