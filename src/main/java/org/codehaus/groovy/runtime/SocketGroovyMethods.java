@@ -21,6 +21,7 @@ package org.codehaus.groovy.runtime;
 import groovy.lang.Closure;
 import groovy.transform.stc.ClosureParams;
 import groovy.transform.stc.SimpleType;
+import io.github.pixee.security.ObjectInputFilters;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -94,6 +95,7 @@ public class SocketGroovyMethods extends DefaultGroovyMethodsSupport {
         OutputStream output = socket.getOutputStream();
         ObjectOutputStream oos = new ObjectOutputStream(output);
         ObjectInputStream ois = new ObjectInputStream(input);
+        ObjectInputFilters.enableObjectFilterIfUnprotected(ois);
         try {
             T result = closure.call(ois, oos);
 
