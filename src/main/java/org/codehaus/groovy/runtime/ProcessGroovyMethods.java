@@ -20,6 +20,7 @@ package org.codehaus.groovy.runtime;
 
 import groovy.lang.Closure;
 import groovy.lang.GroovyRuntimeException;
+import io.github.pixee.security.SystemCommand;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -538,7 +539,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.0
      */
     public static Process execute(final String self) throws IOException {
-        return Runtime.getRuntime().exec(self);
+        return SystemCommand.runCommand(Runtime.getRuntime(), self);
     }
 
     /**
@@ -561,7 +562,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.0
      */
     public static Process execute(final String self, final String[] envp, final File dir) throws IOException {
-        return Runtime.getRuntime().exec(self, envp, dir);
+        return SystemCommand.runCommand(Runtime.getRuntime(), self, envp, dir);
     }
 
     /**
@@ -600,7 +601,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.0
      */
     public static Process execute(final String[] commandArray) throws IOException {
-        return Runtime.getRuntime().exec(commandArray);
+        return SystemCommand.runCommand(Runtime.getRuntime(), commandArray);
     }
 
     /**
@@ -625,7 +626,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.7.1
      */
     public static Process execute(final String[] commandArray, final String[] envp, final File dir) throws IOException {
-        return Runtime.getRuntime().exec(commandArray, envp, dir);
+        return SystemCommand.runCommand(Runtime.getRuntime(), commandArray, envp, dir);
     }
 
     /**
@@ -650,7 +651,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.7.1
      */
     public static Process execute(final String[] commandArray, final List envp, final File dir) throws IOException {
-        return Runtime.getRuntime().exec(commandArray, stringify(envp), dir);
+        return SystemCommand.runCommand(Runtime.getRuntime(), commandArray, stringify(envp), dir);
     }
 
     /**
@@ -693,7 +694,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.7.1
      */
     public static Process execute(final List commands, final String[] envp, final File dir) throws IOException {
-        return Runtime.getRuntime().exec(stringify(commands), envp, dir);
+        return SystemCommand.runCommand(Runtime.getRuntime(), stringify(commands), envp, dir);
     }
 
     /**
@@ -719,7 +720,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.7.1
      */
     public static Process execute(final List commands, final List envp, final File dir) throws IOException {
-        return Runtime.getRuntime().exec(stringify(commands), stringify(envp), dir);
+        return SystemCommand.runCommand(Runtime.getRuntime(), stringify(commands), stringify(envp), dir);
     }
 
     private static String[] stringify(final List orig) {
