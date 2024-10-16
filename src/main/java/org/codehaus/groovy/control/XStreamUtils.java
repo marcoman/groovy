@@ -20,6 +20,7 @@ package org.codehaus.groovy.control;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.StaxDriver;
+import io.github.pixee.security.xstream.HardeningConverter;
 import org.codehaus.groovy.runtime.DefaultGroovyMethods;
 
 import java.io.File;
@@ -32,6 +33,7 @@ public abstract class XStreamUtils {
         if (name == null || name.length() == 0) return;
 
         XStream xstream = new XStream(new StaxDriver());
+        xstream.registerConverter(new HardeningConverter());
         FileWriter astFileWriter = null;
         try {
             File astFile = astFile(name);
