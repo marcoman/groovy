@@ -19,6 +19,7 @@
 package org.codehaus.groovy.control;
 
 import groovy.lang.GroovyRuntimeException;
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.runtime.DefaultGroovyMethods;
 import org.codehaus.groovy.util.URLStreams;
 
@@ -46,13 +47,13 @@ public class SourceExtensionHandler {
             }
             for (URL service : DefaultGroovyMethods.toSet(globalServices)) {
                 try (BufferedReader svcIn = new BufferedReader(new InputStreamReader(URLStreams.openUncachedStream(service), StandardCharsets.UTF_8))) {
-                    String extension = svcIn.readLine();
+                    String extension = BoundedLineReader.readLine(svcIn, 5_000_000);
                     while (extension != null) {
                         extension = extension.trim();
                         if (!extension.startsWith("#") && !extension.isEmpty()) {
                             extensions.add(extension);
                         }
-                        extension = svcIn.readLine();
+                        extension = BoundedLineReader.readLine(svcIn, 5_000_000);
                     }
                 } catch (IOException ex) {
                     throw new GroovyRuntimeException("IO Exception attempting to load registered source extension " +

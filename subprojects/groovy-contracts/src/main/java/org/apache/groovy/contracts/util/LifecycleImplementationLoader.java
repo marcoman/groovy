@@ -18,6 +18,7 @@
  */
 package org.apache.groovy.contracts.util;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,7 +70,7 @@ public final class LifecycleImplementationLoader<S> implements Iterable<S> {
     }
 
     private int parseLine(Class service, URL u, BufferedReader r, int lc, List<String> names) throws IOException, ServiceConfigurationError {
-        String ln = r.readLine();
+        String ln = BoundedLineReader.readLine(r, 5_000_000);
         if (ln == null) {
             return -1;
         }

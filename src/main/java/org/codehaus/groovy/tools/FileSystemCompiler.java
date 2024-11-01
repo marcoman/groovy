@@ -19,6 +19,7 @@
 package org.codehaus.groovy.tools;
 
 import groovy.lang.GroovySystem;
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.control.CompilationUnit;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.ConfigurationException;
@@ -264,7 +265,7 @@ public class FileSystemCompiler {
 
                 try {
                     br = new BufferedReader(new FileReader(fn));
-                    for (String file; (file = br.readLine()) != null; ) {
+                    for (String file; (file = BoundedLineReader.readLine(br, 5_000_000)) != null; ) {
                         fileList.add(file);
                     }
                 } catch (IOException ioe) {

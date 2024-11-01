@@ -23,6 +23,7 @@ import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyResourceLoader;
 import groovy.lang.Script;
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.GroovyBugError;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
@@ -319,7 +320,7 @@ public class GroovyScriptEngine implements ResourceConnector {
         String line;
         while (true) {
             System.out.print("groovy> ");
-            if ((line = br.readLine()) == null || line.equals("quit")) {
+            if ((line = BoundedLineReader.readLine(br, 5_000_000)) == null || line.equals("quit")) {
                 break;
             }
             try {

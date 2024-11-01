@@ -18,6 +18,7 @@
  */
 package org.codehaus.groovy.control.io;
 
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.Janitor;
 
@@ -75,7 +76,7 @@ public abstract class AbstractReaderSource implements ReaderSource {
         if (lineSource != null) {
             while (number < lineNumber) {
                 try {
-                    line = lineSource.readLine();
+                    line = BoundedLineReader.readLine(lineSource, 5_000_000);
                     number++;
                 }
                 catch (IOException e) {

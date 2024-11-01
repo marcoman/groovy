@@ -25,6 +25,7 @@ import groovy.lang.GroovyShell;
 import groovy.lang.GroovySystem;
 import groovy.lang.MissingMethodException;
 import groovy.lang.Script;
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
@@ -617,7 +618,7 @@ public class GroovyMain {
             // as it means no begin() method is present
         }
 
-        while ((line = reader.readLine()) != null) {
+        while ((line = BoundedLineReader.readLine(reader, 5_000_000)) != null) {
             s.setProperty("line", line);
             s.setProperty(lineCountName, ((BigInteger)s.getProperty(lineCountName)).add(BigInteger.ONE));
 

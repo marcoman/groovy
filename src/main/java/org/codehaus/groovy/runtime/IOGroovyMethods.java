@@ -27,6 +27,7 @@ import groovy.transform.stc.FirstParam;
 import groovy.transform.stc.FromString;
 import groovy.transform.stc.PickFirstResolver;
 import groovy.transform.stc.SimpleType;
+import io.github.pixee.security.BoundedLineReader;
 import org.apache.groovy.io.StringBuilderWriter;
 import org.codehaus.groovy.runtime.callsite.BooleanClosureWrapper;
 
@@ -450,7 +451,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
 
         try {
             while (true) {
-                String line = br.readLine();
+                String line = BoundedLineReader.readLine(br, 5_000_000);
                 if (line == null) {
                     break;
                 } else {
@@ -535,7 +536,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
 
         try {
             while (true) {
-                String line = br.readLine();
+                String line = BoundedLineReader.readLine(br, 5_000_000);
                 if (line == null) {
                     break;
                 } else {
@@ -648,7 +649,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
     public static String readLine(Reader self) throws IOException {
         if (self instanceof BufferedReader) {
             BufferedReader br = (BufferedReader) self;
-            return br.readLine();
+            return BoundedLineReader.readLine(br, 5_000_000);
         }
         if (self.markSupported()) {
             return readLineFromReaderWithMark(self);
@@ -975,7 +976,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
             }
 
             private String readNext() throws IOException {
-                String nv = bufferedReader.readLine();
+                String nv = BoundedLineReader.readLine(bufferedReader, 5_000_000);
                 if (nv == null)
                     hasNext = false;
                 return nv;
@@ -1421,7 +1422,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
         BufferedWriter bw = new BufferedWriter(writer);
         String line;
         try {
-            while ((line = br.readLine()) != null) {
+            while ((line = BoundedLineReader.readLine(br, 5_000_000)) != null) {
                 Object o = closure.call(line);
                 if (o != null) {
                     bw.write(o.toString());
@@ -1461,7 +1462,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
         String line;
         try {
             BooleanClosureWrapper bcw = new BooleanClosureWrapper(closure);
-            while ((line = br.readLine()) != null) {
+            while ((line = BoundedLineReader.readLine(br, 5_000_000)) != null) {
                 if (bcw.call(line)) {
                     bw.write(line);
                     bw.newLine();
@@ -1503,7 +1504,7 @@ public class IOGroovyMethods extends DefaultGroovyMethodsSupport {
                 BufferedWriter bw = new BufferedWriter(out);
                 String line;
                 BooleanClosureWrapper bcw = new BooleanClosureWrapper(closure);
-                while ((line = br.readLine()) != null) {
+                while ((line = BoundedLineReader.readLine(br, 5_000_000)) != null) {
                     if (bcw.call(line)) {
                         bw.write(line);
                         bw.newLine();

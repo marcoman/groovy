@@ -18,6 +18,7 @@
  */
 package org.codehaus.groovy.tools;
 
+import io.github.pixee.security.BoundedLineReader;
 import org.apache.groovy.util.SystemUtil;
 
 import java.io.BufferedReader;
@@ -107,7 +108,7 @@ public class LoaderConfiguration {
             int lineNumber = 0;
 
             while (true) {
-                String line = reader.readLine();
+                String line = BoundedLineReader.readLine(reader, 5_000_000);
                 if (line == null) break;
 
                 line = line.trim();

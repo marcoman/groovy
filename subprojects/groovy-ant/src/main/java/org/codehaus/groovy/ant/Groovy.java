@@ -25,6 +25,7 @@ import groovy.lang.GroovyShell;
 import groovy.lang.MissingMethodException;
 import groovy.lang.Script;
 import groovy.util.CharsetToolkit;
+import io.github.pixee.security.BoundedLineReader;
 import org.apache.groovy.io.StringBuilderWriter;
 import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.Project;
@@ -480,7 +481,7 @@ public class Groovy extends Java {
         String line = "";
         BufferedReader in = new BufferedReader(reader);
 
-        while ((line = in.readLine()) != null) {
+        while ((line = BoundedLineReader.readLine(in, 5_000_000)) != null) {
             line = getProject().replaceProperties(line);
             if (line.contains("--")) {
                 txt.append("\n");

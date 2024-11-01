@@ -18,6 +18,7 @@
  */
 package org.codehaus.groovy.tck;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.Reader;
 import java.io.StringReader;
 import java.io.BufferedReader;
@@ -68,7 +69,7 @@ public class ClassicGroovyTestGeneratorHelper implements TestGeneratorHelper {
             String line = null;
             StringBuilder numberedSrcTextBuffer = new StringBuilder();
             int lineNum = 1;
-            while ((line = reader.readLine() ) != null) {
+            while ((line = BoundedLineReader.readLine(reader, 5_000_000) ) != null) {
                 numberedSrcTextBuffer.append(lineNum);
                 numberedSrcTextBuffer.append("\t");
                 numberedSrcTextBuffer.append(line);

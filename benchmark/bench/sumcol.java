@@ -1,6 +1,7 @@
 // $Id: sumcol.java,v 1.5 2007-06-20 03:32:39 bfulgham Exp $
 // http://www.bagley.org/~doug/shootout/
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.*;
 import java.util.*;
 import java.text.*;
@@ -11,7 +12,7 @@ public class sumcol {
       String line;
       try {
          BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
-         while ((line = in.readLine()) != null) {
+         while ((line = BoundedLineReader.readLine(in, 5_000_000)) != null) {
             sum = sum + Integer.parseInt(line);
          }
       } catch (IOException e) {

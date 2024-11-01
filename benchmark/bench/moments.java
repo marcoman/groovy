@@ -1,6 +1,7 @@
 // $Id: moments.java,v 1.1 2004-11-23 08:08:44 bfulgham Exp $
 // http://www.bagley.org/~doug/shootout/
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.*;
 import java.util.*;
 import java.text.*;
@@ -23,7 +24,7 @@ public class moments {
 
         try {
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
-            while ((line = in.readLine()) != null) {
+            while ((line = BoundedLineReader.readLine(in, 5_000_000)) != null) {
         num = Double.parseDouble(line);
         sum += num;
         nums.add(new Double(num));

@@ -1,6 +1,7 @@
 // $Id: spellcheck.java,v 1.1 2004-05-23 07:14:28 bfulgham Exp $
 // http://www.bagley.org/~doug/shootout/
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.*;
 import java.util.*;
 
@@ -12,7 +13,7 @@ public class spellcheck {
 
         try {
             BufferedReader in = new BufferedReader(new FileReader("Usr.Dict.Words"));
-            while ((word = in.readLine()) != null) {
+            while ((word = BoundedLineReader.readLine(in, 5_000_000)) != null) {
                 dict.put(word, new Integer(1));
             }
             in.close();
@@ -23,7 +24,7 @@ public class spellcheck {
 
         try {
             BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
-            while ((word = in.readLine()) != null) {
+            while ((word = BoundedLineReader.readLine(in, 5_000_000)) != null) {
                 if (!dict.containsKey(word)) {
                     System.out.println(word);
                 }

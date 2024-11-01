@@ -20,6 +20,7 @@ package org.codehaus.groovy.runtime;
 
 import groovy.lang.Closure;
 import groovy.lang.GroovyRuntimeException;
+import io.github.pixee.security.BoundedLineReader;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -492,7 +493,7 @@ public class ProcessGroovyMethods extends DefaultGroovyMethodsSupport {
             BufferedReader br = new BufferedReader(isr);
             String next;
             try {
-                while ((next = br.readLine()) != null) {
+                while ((next = BoundedLineReader.readLine(br, 5_000_000)) != null) {
                     if (app != null) {
                         app.append(next);
                         app.append("\n");

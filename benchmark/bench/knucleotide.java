@@ -4,6 +4,7 @@
  contributed by James McIlree
  */
 
+import io.github.pixee.security.BoundedLineReader;
 import java.util.*;
 import java.io.*;
 import java.util.concurrent.*;
@@ -97,12 +98,12 @@ public class knucleotide {
     public static void main (String[] args) throws Exception {
         String line;
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
-        while ((line = in.readLine()) != null) {
+        while ((line = BoundedLineReader.readLine(in, 5_000_000)) != null) {
             if (line.startsWith(">THREE")) break;
         }
 
         StringBuilder sbuilder = new StringBuilder();
-        while ((line = in.readLine()) != null) {
+        while ((line = BoundedLineReader.readLine(in, 5_000_000)) != null) {
             sbuilder.append(line);
         }
 

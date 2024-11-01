@@ -2,6 +2,7 @@
 // http://www.bagley.org/~doug/shootout/
 // author: Dirus@programmer.net
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.*;
 import java.net.*;
 
@@ -42,7 +43,7 @@ class EchoClient extends Thread {
             for(int i = 0; i < iIterations; ++i) {
             out.write(bytesOut);
             out.flush();
-            String strRead = in.readLine();
+            String strRead = BoundedLineReader.readLine(in, 5_000_000);
             if(!strRead.equals(strIn))
                 throw new RuntimeException("client: \"" + strIn + "\" ne \"" + strRead + "\"");
             }

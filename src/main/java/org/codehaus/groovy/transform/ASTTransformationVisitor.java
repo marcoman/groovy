@@ -23,6 +23,7 @@ import groovy.lang.Tuple;
 import groovy.lang.Tuple2;
 import groovy.lang.Tuple3;
 import groovy.transform.CompilationUnitAware;
+import io.github.pixee.security.BoundedLineReader;
 import org.codehaus.groovy.ast.ASTNode;
 import org.codehaus.groovy.ast.AnnotatedNode;
 import org.codehaus.groovy.ast.AnnotationNode;
@@ -283,7 +284,7 @@ public final class ASTTransformationVisitor extends ClassCodeVisitorSupport {
                 try (BufferedReader svcIn = new BufferedReader(new InputStreamReader(URLStreams.openUncachedStream(service), StandardCharsets.UTF_8))) {
                     String className;
                     try {
-                        className = svcIn.readLine();
+                        className = BoundedLineReader.readLine(svcIn, 5_000_000);
                     } catch (IOException ioe) {
                         compilationUnit.getErrorCollector().addError(new SimpleMessage(
                                 "IOException reading the service definition at "
@@ -321,7 +322,7 @@ public final class ASTTransformationVisitor extends ClassCodeVisitorSupport {
                             }
                         }
                         try {
-                            className = svcIn.readLine();
+                            className = BoundedLineReader.readLine(svcIn, 5_000_000);
                         } catch (IOException ioe) {
                             compilationUnit.getErrorCollector().addError(new SimpleMessage(
                                     "IOException reading the service definition at "

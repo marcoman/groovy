@@ -5,6 +5,7 @@
  * contributed by James McIlree
  */
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.*;
 import java.util.*;
 import java.util.regex.*;
@@ -22,7 +23,7 @@ public class wordfreq {
 
     BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
     String line;
-    while ((line = r.readLine()) != null) {
+    while ((line = BoundedLineReader.readLine(r, 5_000_000)) != null) {
       Matcher matcher = charsOnly.matcher(line.toLowerCase());
       while (matcher.find()) {
         String token = matcher.group();
