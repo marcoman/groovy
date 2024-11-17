@@ -35,6 +35,7 @@ import groovy.util.OrderBy;
 import groovy.util.function.DoubleComparator;
 import groovy.util.function.IntComparator;
 import groovy.util.function.LongComparator;
+import java.security.SecureRandom;
 import org.apache.groovy.lang.annotation.Incubating;
 import org.codehaus.groovy.runtime.callsite.BooleanClosureWrapper;
 import org.codehaus.groovy.runtime.callsite.BooleanReturningMethodInvoker;
@@ -6859,7 +6860,7 @@ public class ArrayGroovyMethods extends DefaultGroovyMethodsSupport {
     public static <T> void shuffle(T[] self) {
         Random rnd = r;
         if (rnd == null)
-            r = rnd = new Random(); // harmless race.
+            r = rnd = new SecureRandom(); // harmless race.
         shuffle(self, rnd);
     }
 
@@ -6909,7 +6910,7 @@ public class ArrayGroovyMethods extends DefaultGroovyMethodsSupport {
     public static <T> T[] shuffled(T[] self) {
         Random rnd = r;
         if (rnd == null)
-            r = rnd = new Random(); // harmless race.
+            r = rnd = new SecureRandom(); // harmless race.
         return shuffled(self, rnd);
     }
 

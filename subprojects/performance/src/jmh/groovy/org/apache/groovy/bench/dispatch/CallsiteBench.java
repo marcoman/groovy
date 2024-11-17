@@ -18,6 +18,7 @@
  */
 package org.apache.groovy.bench.dispatch;
 
+import java.security.SecureRandom;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -89,7 +90,7 @@ public class CallsiteBench {
 
     @State(Scope.Thread)
     public static class PolymorphicState {
-        final Random random = new Random();
+        final Random random = new SecureRandom();
         Object[] receivers;
         @Setup(Level.Iteration)
         public void setUp() {
@@ -102,7 +103,7 @@ public class CallsiteBench {
 
     @State(Scope.Thread)
     public static class MegamorphicState {
-        final Random random = new Random();
+        final Random random = new SecureRandom();
         Object[] receivers;
         @Setup(Level.Iteration)
         public void setUp() {
