@@ -20,6 +20,7 @@ package groovy.servlet;
 
 import groovy.lang.Binding;
 import groovy.xml.MarkupBuilder;
+import static io.github.pixee.security.jakarta.PathValidator.validateDispatcherPath;
 import org.codehaus.groovy.GroovyBugError;
 import org.codehaus.groovy.runtime.MethodClosure;
 
@@ -382,14 +383,14 @@ public class ServletBinding extends Binding {
     public void forward(String path) throws ServletException, IOException {
         HttpServletRequest request = (HttpServletRequest) super.getVariable("request");
         HttpServletResponse response = (HttpServletResponse) super.getVariable("response");
-        RequestDispatcher dispatcher = request.getRequestDispatcher(path);
+        RequestDispatcher dispatcher = request.getRequestDispatcher(validateDispatcherPath(path));
         dispatcher.forward(request, response);
     }
 
     public void include(String path) throws ServletException, IOException {
         HttpServletRequest request = (HttpServletRequest) super.getVariable("request");
         HttpServletResponse response = (HttpServletResponse) super.getVariable("response");
-        RequestDispatcher dispatcher = request.getRequestDispatcher(path);
+        RequestDispatcher dispatcher = request.getRequestDispatcher(validateDispatcherPath(path));
         dispatcher.include(request, response);
     }
 
