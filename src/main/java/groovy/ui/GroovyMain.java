@@ -25,6 +25,8 @@ import groovy.lang.GroovyShell;
 import groovy.lang.GroovySystem;
 import groovy.lang.MissingMethodException;
 import groovy.lang.Script;
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import org.codehaus.groovy.control.CompilationFailedException;
 import org.codehaus.groovy.control.CompilerConfiguration;
 import org.codehaus.groovy.control.customizers.ImportCustomizer;
@@ -433,7 +435,7 @@ public class GroovyMain {
     public String getText(String uriOrFilename) throws IOException {
         if (URI_PATTERN.matcher(uriOrFilename).matches()) {
             try {
-                return ResourceGroovyMethods.getText(new URL(uriOrFilename));
+                return ResourceGroovyMethods.getText(Urls.create(uriOrFilename, Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS));
             } catch (Exception e) {
                 throw new GroovyRuntimeException("Unable to get script from URL: ", e);
             }

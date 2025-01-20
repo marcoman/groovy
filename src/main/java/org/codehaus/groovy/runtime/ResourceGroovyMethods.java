@@ -31,6 +31,8 @@ import groovy.transform.stc.FromString;
 import groovy.transform.stc.PickFirstResolver;
 import groovy.transform.stc.SimpleType;
 import groovy.util.CharsetToolkit;
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import org.codehaus.groovy.runtime.callsite.BooleanReturningMethodInvoker;
 import org.codehaus.groovy.runtime.typehandling.DefaultTypeTransformation;
 
@@ -2685,7 +2687,7 @@ public class ResourceGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.8.2
      */
     public static URL toURL(CharSequence self) throws MalformedURLException {
-        return new URL(self.toString());
+        return Urls.create(self.toString(), Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
     }
 
     /**
@@ -2697,7 +2699,7 @@ public class ResourceGroovyMethods extends DefaultGroovyMethodsSupport {
      * @since 1.0
      */
     public static URL toURL(String self) throws MalformedURLException {
-        return new URL(self);
+        return Urls.create(self, Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
     }
 
     /**

@@ -22,6 +22,8 @@ import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyRuntimeException;
 import groovy.lang.GroovyShell;
 import groovy.lang.Script;
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -137,7 +139,7 @@ public class GroovySocketServer implements Runnable {
         this.source = source;
         this.autoOutput = autoOutput;
         try {
-            url = new URL("http", InetAddress.getLocalHost().getHostAddress(), port, "/");
+            url = Urls.create("http", InetAddress.getLocalHost().getHostAddress(), port, "/", Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
             System.out.println("groovy is listening on port " + port);
         } catch (IOException e) {
             e.printStackTrace();
