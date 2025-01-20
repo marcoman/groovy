@@ -23,6 +23,8 @@ import groovy.xml.slurpersupport.GPathResult;
 import groovy.xml.slurpersupport.NamespaceAwareHashMap;
 import groovy.xml.slurpersupport.Node;
 import groovy.xml.slurpersupport.NodeChild;
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import org.xml.sax.Attributes;
 import org.xml.sax.DTDHandler;
 import org.xml.sax.EntityResolver;
@@ -340,7 +342,7 @@ public class XmlSlurper extends DefaultHandler {
      * @param base The URL used to resolve relative URLs
      */
     public void setEntityBaseUrl(final URL base) {
-        reader.setEntityResolver((publicId, systemId) -> new InputSource(new URL(base, systemId).openStream()));
+        reader.setEntityResolver((publicId, systemId) -> new InputSource(Urls.create(base, systemId, Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS).openStream()));
     }
 
     /* (non-Javadoc)

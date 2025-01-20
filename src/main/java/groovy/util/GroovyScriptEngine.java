@@ -23,6 +23,8 @@ import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyResourceLoader;
 import groovy.lang.Script;
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import org.codehaus.groovy.GroovyBugError;
 import org.codehaus.groovy.ast.ClassHelper;
 import org.codehaus.groovy.ast.ClassNode;
@@ -371,7 +373,7 @@ public class GroovyScriptEngine implements ResourceConnector {
         for (URL root : roots) {
             URL scriptURL = null;
             try {
-                scriptURL = new URL(root, resourceName);
+                scriptURL = Urls.create(root, resourceName, Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
                 groovyScriptConn = openConnection(scriptURL);
 
                 break; // Now this is a bit unusual
@@ -472,7 +474,7 @@ public class GroovyScriptEngine implements ResourceConnector {
         URL[] roots = new URL[urls.length];
         for (int i = 0; i < roots.length; i++) {
             if (urls[i].contains("://")) {
-                roots[i] = new URL(urls[i]);
+                roots[i] = Urls.create(urls[i], Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
             } else {
                 roots[i] = new File(urls[i]).toURI().toURL();
             }
